@@ -1,6 +1,6 @@
 open NetKAT_Sat
 open SDN_Types
-open Types
+open NetKAT_Types
 
 module Equivalence = functor (Sat : Sat_description) -> struct
 

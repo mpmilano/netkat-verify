@@ -1,4 +1,4 @@
-open Types
+open NetKAT_Types
 open VInt
 open NetKAT_Verify_Reachability
 open NetKAT_Verify_Tools

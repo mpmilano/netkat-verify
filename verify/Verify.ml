@@ -1,6 +1,6 @@
 open NetKAT_Verify_Reachability
 open NetKAT_Verify_Equivalence
-open Types
+open NetKAT_Types
 
 type parseType = 
   | NetKAT

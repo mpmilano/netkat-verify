@@ -1,6 +1,6 @@
 open Packet
-open Types
-open Util
+open NetKAT_Types
+open NetKAT_Util
 open Unix
 
 

@@ -1,6 +1,6 @@
 open Packet
-open Types
-open Util
+open NetKAT_Types
+open NetKAT_Util
 open Unix
 open NetKAT_Sat
 
@@ -39,7 +39,7 @@ module Verify = struct
   end
   module Stateful = functor (Sat : Sat_description) -> struct
     open SDN_Types
-    open Types
+    open NetKAT_Types
     open Sat_Syntax
     open Sat_Utils
     open Stateless
@@ -179,7 +179,7 @@ module Verify = struct
 	with Not_found -> 
 	  let sym = fresh (SRelation [SPacket; SPacket]) in
 	  let rules = 
-	    ZToplevelComment (Pretty.string_of_policy pol)::
+	    ZToplevelComment (NetKAT_Pretty.string_of_policy pol)::
 	      (match pol with 
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");

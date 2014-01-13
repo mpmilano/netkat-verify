@@ -36,13 +36,13 @@
       match edgeList with
 	| h::[] ->
 	  let (swSrc, prtSrc, swDst, prtDst) = src_port_vals h in
-      let open Types in
+      let open NetKAT_Types in
 	  Seq ( Seq (Filter (Test (Switch, swSrc)),
 		     Filter (Test( Header S.InPort, prtSrc))),
 		Seq (Mod (Switch, swDst), Mod (Header S.InPort, prtDst)))
 	| h::t -> 
 	  let (swSrc, prtSrc, swDst, prtDst) = src_port_vals h in
-      let open Types in
+      let open NetKAT_Types in
 	  Seq ( Seq ( Seq (Filter (Test (Switch, swSrc)), 
 			   Filter (Test (Header SDN_Types.InPort, prtSrc))),
 		      Seq (Mod (Switch, swDst), Mod (Header S.InPort, prtDst))),
@@ -51,7 +51,7 @@
     create_pol edges
 
   let parse_graph ptstar = 
-    let open Types in
+    let open NetKAT_Types in
     let graph = Topology.empty in 
     let rec parse_links (graph: Topology.t) (pol: policy): Topology.t = 
       let assemble switch1 port1 switch2 port2 : Topology.t =
