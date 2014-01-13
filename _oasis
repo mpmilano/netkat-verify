@@ -44,7 +44,7 @@ Library quickcheck
     netcore,
     verify_lib
   Modules:
-    NetKAT_Arbitrary
+    Verify_Dummy
 
 Executable testtool
   Path: test
