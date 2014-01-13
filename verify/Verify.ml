@@ -41,7 +41,7 @@ let parse_predicate _ = True
 let parse_reach_args argl = 
   match argl with
     | [inp;pol;outp] -> parse_predicate inp, parse_program pol, parse_predicate outp
-    | _ -> failwith "incorrect arguments to reachability"
+    | _ -> failwith (Printf.sprintf "incorrect arguments to reachability.\n%s" usage)
 
 let _ =
   Arg.parse 
@@ -53,13 +53,13 @@ let _ =
     usage; match (!mode),(!parse_things) with 
       | Equiv,[hd;tl] -> ()
       | Reach, [hd;mid;tl] -> ()
-      | _ -> failwith "incorrect number of arguments supplied for selected run type"
+      | _ -> failwith (Printf.sprintf "incorrect number of arguments supplied for selected run type:\n%s" usage)
 
 let _ = match (!mode) with
   | Equiv -> 
     let prog1, prog2 = match List.map parse_program (!parse_things) with
       | [prog1;prog2] -> prog1,prog2
-      | _ -> failwith "incorrect arguments supplied to equiv" in
+      | _ -> failwith (Printf.sprintf "incorrect arguments supplied to equiv.\n%s" usage) in
     if check_equivalence prog1 prog2 (List.hd (!run_name))
     then Printf.printf "Sat: programs equivalent\n"
     else Printf.printf "Unsat: programs differ\n"
