@@ -1,0 +1,76 @@
+OASISFormat: 0.3
+Name:        verify
+Version:     0.9
+Synopsis:    The frenetic Verification suite
+Authors:     Nate Foster, Matthew Milano
+License:     LGPL
+Plugins:     META (0.3), StdFiles (0.3), DevFiles (0.3)
+BuildTools:
+  ocamlbuild,
+  ocamldoc
+
+XStdFilesREADME: False
+XStdFilesAUTHORS: False
+
+Library verify_lib
+  Path: lib
+  BuildDepends:
+    lwt,
+    lwt.unix,
+    cstruct,
+    dprle,
+    lwt.syntax,
+    lwt.syntax.log,
+    str,
+    ocamlgraph,
+    packet,
+    openflow,
+    topology,
+    netcore
+  InternalModules:
+    NetKAT_Sat,
+    NetKAT_Verify_Tools,
+    NetKAT_Dehop_Graph
+  Modules:
+    NetKAT_Verify_Equivalence,
+    NetKAT_Verify_Reachability
+
+Library quickcheck
+  Findlibparent: verify_lib
+  Findlibname: quickcheck
+  Path: quickcheck
+  BuildDepends:
+    quickcheck,
+    netcore,
+    verify_lib
+  Modules:
+    NetKAT_Arbitrary
+
+Executable testtool
+  Path: test
+  MainIs: Test.ml
+  BuildDepends: 
+    oUnit,packet,
+    netcore,
+    verify_lib,
+    pa_ounit,
+    pa_ounit.syntax,
+    quickcheck,
+    verify_lib.quickcheck
+  Install: False
+
+Test all_tests
+  Command: $testtool inline-test-runner dummy
+  Run$: flag(tests)
+  TestTools: testtool
+
+Executable verify
+  Path: verify
+  MainIs: Verify.ml
+  Install$: flag(installexec)
+  BuildDepends:
+    lwt,
+    lwt.syntax,
+    netcore,
+    verify_lib
+
