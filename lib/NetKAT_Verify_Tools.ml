@@ -8,9 +8,18 @@ open NetKAT_Sat.Sat_Utils
 
 let make_vint v = VInt.Int64 (Int64.of_int v)
 
-let verify (description: string) (initial_state: pred) (program: policy) (final_state: pred) (desired_outcome: bool) : bool = 
-	check description initial_state program final_state (Some desired_outcome)
-
+let verify (description: string) (initial_state: pred) (program: policy) 
+    (final_state: pred) (desired_outcome: bool) : bool = 
+  let oc = open_out (Printf.sprintf "%s%sdebug-%s.kat" 
+		       (Filename.get_temp_dir_name ()) Filename.dir_sep description) in
+  Printf.fprintf oc "Name:%s\nInput:%s\nProgram:%s\nOutput:%s\nResult:%b\n" 
+    description
+    (NetKAT_Pretty.string_of_pred initial_state)
+    (NetKAT_Pretty.string_of_policy program)
+    (NetKAT_Pretty.string_of_pred final_state)
+    desired_outcome; close_out oc;
+  check description initial_state program final_state (Some desired_outcome)
+	  
 
 (* let verify_history (description: string) (initial_state: pred) (program: policy) expr (final_state: pred) (desired_outcome: bool) : bool = 
 	check_with_history expr description initial_state program final_state (Some desired_outcome)
