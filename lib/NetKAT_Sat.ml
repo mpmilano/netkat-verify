@@ -350,7 +350,8 @@ module Sat =
       [ZDefineVar (name, SMacro (arglist, rettype), body)]
 	
     let z3_macro, z3_macro_top = 
-      let z3_macro_picklocation put_at_top (name : string) (arglist : (zVar * zSort) list) (rettype : zSort)(body : zFormula) : zTerm = 
+      let z3_macro_picklocation put_at_top (name : string) (arglist : (zVar * zSort) list) 
+	  (rettype : zSort)(body : zFormula) : zTerm = 
 	let name = name in
 	let new_macro = (define_z3_macro name arglist rettype body) in
 	(if put_at_top then
