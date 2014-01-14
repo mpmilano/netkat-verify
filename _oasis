@@ -26,6 +26,7 @@ Library verify_lib
     packet,
     openflow,
     topology,
+    threads,
     netcore
   InternalModules:
     NetKAT_Sat,
