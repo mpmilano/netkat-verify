@@ -16,7 +16,7 @@ let parse_things = ref []
 let run_name = ref []
   
 let usage = "usage: verify [-f NetKAT|GML] [-m equiv|reach] run-name [inp pol outp] [prog1 prog2]"
-  
+
   
 (* from http://rosettacode.org/wiki/Command-line_arguments#OCaml *)
 let speclist = [
@@ -39,12 +39,13 @@ let speclist = [
 let parse_program str = match (!parseType) with 
   | NetKAT -> Parser.program Lexer.token (Lexing.from_string str)
   | GML -> failwith "GML not currently supported"
-let parse_predicate str = True(*match Parser.program Lexer.token (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
+let parse_predicate str = match Parser.program Lexer.token 
+    (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
   | Filter (pred) -> pred
-  | _ -> failwith "huh, parsing must have failed"*)
+  | _ -> failwith "huh, parsing must have failed"
 let parse_reach_args argl = 
   match argl with
-    | [inp;pol;outp] -> parse_predicate inp, parse_program pol, parse_predicate outp
+    | [outp;pol;inp] -> parse_predicate inp, parse_program pol, parse_predicate outp
     | _ -> failwith (Printf.sprintf "incorrect arguments to reachability.\n%s" usage)
 
 
@@ -70,6 +71,7 @@ let _ = match (!mode) with
     else Printf.printf "Unsat: programs differ\n"
   | Reach -> 
     let (inp,prog,outp) = parse_reach_args (!parse_things) in
+    Printf.printf "Input: %s\nOutput: %s\n" (NetKAT_Pretty.string_of_pred inp) (NetKAT_Pretty.string_of_pred outp);
     if check_reachability (List.hd (!run_name)) inp prog outp (Some true)
     then Printf.printf "Sat: path found.\n"
-    else Printf.eprintf "Unsat: path impossible.\n"
+    else Printf.printf "Unsat: path impossible.\n"
