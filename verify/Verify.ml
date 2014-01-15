@@ -37,9 +37,9 @@ let speclist = [
 ]
 
 let parse_program str = match (!parseType) with 
-  | NetKAT -> Parser.program Lexer.token (Lexing.from_string str)
+  | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string str)
   | GML -> failwith "GML not currently supported"
-let parse_predicate str = match Parser.program Lexer.token 
+let parse_predicate str = match NetKAT_Parser.program NetKAT_Lexer.token 
     (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
   | Filter (pred) -> pred
   | _ -> failwith "huh, parsing must have failed"
