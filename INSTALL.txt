@@ -1,0 +1,47 @@
+(* OASIS_START *)
+(* DO NOT EDIT (digest: 098f7b6e1e0ce7779379c986c89986dc) *)
+This is the INSTALL file for the verify distribution.
+
+This package uses OASIS to generate its build system. See section OASIS for
+full information. 
+
+Dependencies
+============
+
+In order to compile this package, you will need:
+* ocaml for all, test all_tests
+* findlib
+* lwt for library verify_lib, executable verify
+* cstruct for library verify_lib
+* dprle for library verify_lib
+* ocamlgraph for library verify_lib
+* packet for library verify_lib, executable testtool
+* openflow for library verify_lib
+* topology for library verify_lib
+* netcore
+* quickcheck for library quickcheck, executable testtool
+* oUnit for executable testtool
+* pa_ounit for executable testtool
+
+Installing
+==========
+
+1. Uncompress the source archive and go to the root of the package
+2. Run 'ocaml setup.ml -configure'
+3. Run 'ocaml setup.ml -build'
+4. Run 'ocaml setup.ml -install'
+
+Uninstalling
+============
+
+1. Go to the root of the package 
+2. Run 'ocaml setup.ml -uninstall'
+
+OASIS
+=====
+
+OASIS is a program that generates a setup.ml file using a simple '_oasis'
+configuration file. The generated setup only depends on the standard OCaml
+installation: no additional library is required.
+
+(* OASIS_STOP *)

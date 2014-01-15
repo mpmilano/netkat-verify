@@ -1,0 +1,23 @@
+# OASIS_START
+# DO NOT EDIT (digest: b52098cf84a09a576ac59702f174518a)
+version = "0.9"
+description = "The frenetic Verification suite"
+requires =
+"lwt lwt.unix cstruct dprle lwt.syntax lwt.syntax.log str ocamlgraph packet openflow topology threads netcore"
+archive(byte) = "verify_lib.cma"
+archive(byte, plugin) = "verify_lib.cma"
+archive(native) = "verify_lib.cmxa"
+archive(native, plugin) = "verify_lib.cmxs"
+exists_if = "verify_lib.cma"
+package "quickcheck" (
+ version = "0.9"
+ description = "The frenetic Verification suite"
+ requires = "quickcheck netcore verify_lib"
+ archive(byte) = "quickcheck.cma"
+ archive(byte, plugin) = "quickcheck.cma"
+ archive(native) = "quickcheck.cmxa"
+ archive(native, plugin) = "quickcheck.cmxs"
+ exists_if = "quickcheck.cma"
+)
+# OASIS_STOP
+
