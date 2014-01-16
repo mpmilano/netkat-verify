@@ -206,8 +206,8 @@ module Verify = struct
 		   ZDeclareRule (sym, [inpkt; outpkt], ZEquals (inpkt_t, outpkt_t)); 
 		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t]) ); 
 							     zterm (TApp (TVar sym, [midpkt_t; outpkt_t]))])]
-		| Choice _-> failwith "I'm not rightly sure what a \"choice\" is "
-		| Link _ -> failwith "wait, link is a special form now?  What's going on?") in
+		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
+		| Link _ -> failwith "We're not supporting links yet, parse them out!") in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
       define_relation, get_rules
@@ -232,7 +232,7 @@ let check_reachability  str inp pol outp oko =
   let x = Pervasives.inpkt in
   let y = Pervasives.outpkt in
   let open Sat_Syntax in
-  let entry_sym = Verify.define_relation pol in
+  let entry_sym = Verify.define_relation (Sat_Utils.remove_links pol) in
   let last_rule = ZDeclareRule (Pervasives.qrule, [x;y],
 				    ZAnd[Verify.forwards_pred inp x;
 					     Verify.forwards_pred outp y;
