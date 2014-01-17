@@ -74,12 +74,23 @@ module Verify = struct
     (TCPDstPort "^serialize_sort SInt ^")
     (EthSrc "^serialize_sort SInt ^")
     (InPort "^serialize_sort SInt ^")))))
-(declare-datatypes
- ()
- ((Hist 
-    (hist-singleton (packet Packet))
-    (hist (packet Packet) (rest-hist Hist))
-    )))" ^ "\n" 
+
+(define-sort Hist () (Array Packet (_ BitVec 2)))
+
+(define-fun hist_empty () Hist ((as const Hist) (_ bv0 2)))
+
+(define-fun in_hist ((x Packet) (s Hist)) Bool (bvugt (select s x) (_ bv0 2)))
+
+(define-fun hist ((x Packet) (s Hist)) Hist
+  (store s x 
+	 (bvadd (_ bv1 2) 
+		(bvlshr 
+		 (bvadd (select s x) (_ bv1 2))
+		 (_ bv1 2)))))
+
+(define-fun hist-singleton ((p Packet)) Hist (hist p hist_empty))
+
+" ^ "\n" 
 
     end
       
@@ -227,7 +238,6 @@ module Verify = struct
 									      ZEquals(inhist_t, outhist_t)]);
 		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t; inhist_t; midhist_t]) ); 
 									      zterm (TApp (TVar sym, [midpkt_t; outpkt_t; midhist_t; outhist_t]))])]
-		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) -> 
 		  let modsw = mod_fun Switch in
 		  let modpt = mod_fun (Header SDN_Types.InPort) in
@@ -238,6 +248,7 @@ module Verify = struct
 							   zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2)]));
 							   zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2)]));
 							   ZEquals(outhist_t, hist_cons outpkt_t inhist_t)])]
+		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		  ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
