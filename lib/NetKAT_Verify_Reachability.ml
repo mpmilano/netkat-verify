@@ -207,7 +207,15 @@ module Verify = struct
 		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t]) ); 
 							     zterm (TApp (TVar sym, [midpkt_t; outpkt_t]))])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
-		| Link _ -> failwith "We're not supporting links yet, parse them out!") in
+		| Link (sw1, pt1, sw2, pt2) -> 
+		  let modsw = mod_fun Switch in
+		  let modpt = mod_fun (Header SDN_Types.InPort) in
+		  [ZToplevelComment("this is a link");
+		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[forwards_pred (Test (Switch, sw1)) inpkt; 
+							   forwards_pred (Test ((Header SDN_Types.InPort), pt1)) inpkt;
+							   zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2)]));
+							   zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2)]))])]
+		  ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
       define_relation, get_rules
