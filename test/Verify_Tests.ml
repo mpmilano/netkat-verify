@@ -370,6 +370,14 @@ let topology_0 = (combine_topologies
 [
 (make_transition (0,0) (1,1))
 ])
+let topology_5 = (combine_topologies
+[
+(make_transition (0,0) (1,1))
+;(make_transition (1,1) (2,2))
+;(make_transition (2,2) (3,3))
+;(make_transition (3,3) (4,4))
+;(make_transition (4,4) (5,5))
+])
 let topology_10 = (combine_topologies
 [
 (make_transition (0,0) (1,1))
@@ -854,6 +862,9 @@ TEST "benchmark" =
     let outp = (make_packet_2 1 1) in
     let start_time : float = Unix.time () in 
     let _ = (verify "1" inpt (make_simple_topology topology_0) outp false) in
+    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
+    let start_time : float = Unix.time () in 
+    let _ = (verify "5" inpt (make_simple_topology topology_5) outp false) in
     print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
     let start_time : float = Unix.time () in 
     let _ = (verify "10" inpt (make_simple_topology topology_10) outp false) in
