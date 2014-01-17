@@ -75,18 +75,14 @@ module Verify = struct
     (EthSrc "^serialize_sort SInt ^")
     (InPort "^serialize_sort SInt ^")))))
 
-(define-sort Hist () (Array Packet (_ BitVec 2)))
+(define-sort Hist () (Array Packet Bool))
 
-(define-fun hist_empty () Hist ((as const Hist) (_ bv0 2)))
+(define-fun hist_empty () Hist ((as const Hist) false))
 
-(define-fun in_hist ((x Packet) (s Hist)) Bool (bvugt (select s x) (_ bv0 2)))
+(define-fun in_hist ((x Packet) (s Hist)) Bool (select s x) )
 
 (define-fun hist ((x Packet) (s Hist)) Hist
-  (store s x 
-	 (bvadd (_ bv1 2) 
-		(bvlshr 
-		 (bvadd (select s x) (_ bv1 2))
-		 (_ bv1 2)))))
+  (store s x true))
 
 (define-fun hist-singleton ((p Packet)) Hist (hist p hist_empty))
 
