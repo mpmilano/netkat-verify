@@ -14,21 +14,31 @@ module Verify = struct
     module Pervasives = struct
       let startpkt = "starting_packet"
       let endpkt = "ending_packet"
+      let full_hist = "full_hist"
       let inpkt = "inpkt"
       let midpkt = "midpkt"
       let outpkt = "outpkt"
+      let inhist = "inhist"
+      let midhist = "midhist"
+      let outhist = "outhist"
+      let hist_singleton = "hist-singleton"
+      let histcons = "hist"
       let qrule = "q"
       let declarations = [ZDeclareVar(startpkt, SPacket);
 			  ZDeclareVar(endpkt, SPacket);
+			  ZDeclareVar(full_hist, SHistory);
 			  ZDeclareVar(inpkt, SPacket);
 			  ZDeclareVar(midpkt, SPacket);
 			  ZDeclareVar(outpkt, SPacket);
-			  ZDeclareVar(qrule, SRelation([SPacket; SPacket]))]
-      let reachability_query = (Printf.sprintf "(query (q %s %s) 
+			  ZDeclareVar(inhist,SHistory);
+			  ZDeclareVar(midhist,SHistory);
+			  ZDeclareVar(outhist,SHistory);
+			  ZDeclareVar(qrule, SRelation([SPacket; SPacket; SHistory]))]
+      let reachability_query = (Printf.sprintf "(query (q %s %s %s) 
 :default-relation smt_relation2
 :engine PDR
 :print-answer false)
-" startpkt endpkt)
+" startpkt endpkt full_hist)
     end
       
       
@@ -173,48 +183,61 @@ module Verify = struct
       let outpkt_t = TVar outpkt in
       let midpkt = Pervasives.midpkt in
       let midpkt_t = TVar midpkt in
+      let inhist = Pervasives.inhist in
+      let inhist_t = TVar inhist in
+      let outhist = Pervasives.outhist in
+      let outhist_t = TVar outhist in
+      let midhist = Pervasives.midhist in
+      let midhist_t = TVar midhist in
+
       let rec define_relation pol = 
 	try 
 	  fst (Hashtbl.find hashtbl pol)
 	with Not_found -> 
-	  let sym = fresh (SRelation [SPacket; SPacket]) in
+	  let sym = fresh (SRelation [SPacket; SPacket; SHistory; SHistory]) in
 	  let rules = 
 	    ZToplevelComment (NetKAT_Pretty.string_of_policy pol)::
 	      (match pol with 
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");
-		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd [forwards_pred pred inpkt; ZEquals( inpkt_t,  outpkt_t )])]
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd [forwards_pred pred inpkt; 
+									      ZEquals( inpkt_t,  outpkt_t );
+									      ZEquals(inhist_t, outhist_t)])]
 		| Mod(f,v) -> 
 		  let modfn = mod_fun f in
 		  [ZToplevelComment("this is a mod");
-		   ZDeclareRule (sym, [inpkt; outpkt], zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v)])))]
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v)]));
+									      ZEquals(inhist_t, outhist_t)])]
 		| Par (pol1, pol2) -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  let pol2_sym = TVar (define_relation pol2) in
  		  [ZToplevelComment("this is a par");
-		   ZDeclareRule (sym, [inpkt; outpkt], zterm (TApp (pol1_sym, [inpkt_t; outpkt_t]))); 
-		   ZDeclareRule (sym, [inpkt; outpkt], zterm (TApp (pol2_sym, [inpkt_t; outpkt_t])))]
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], zterm (TApp (pol1_sym, [inpkt_t; outpkt_t; inhist_t; outhist_t]))); 
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], zterm (TApp (pol2_sym, [inpkt_t; outpkt_t; inhist_t; outhist_t])))]
 		| Seq (pol1, pol2) -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  let pol2_sym = TVar (define_relation pol2) in
  		  [ZToplevelComment("this is a seq");
-		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t])); 
-							     zterm (TApp (pol2_sym, [midpkt_t; outpkt_t]))])]
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t; inhist_t; midhist_t])); 
+									      zterm (TApp (pol2_sym, [midpkt_t; outpkt_t; midhist_t; outhist_t]))])]
 		| Star pol1  -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  [ZToplevelComment("this is a star");
-		   ZDeclareRule (sym, [inpkt; outpkt], ZEquals (inpkt_t, outpkt_t)); 
-		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t]) ); 
-							     zterm (TApp (TVar sym, [midpkt_t; outpkt_t]))])]
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd [ZEquals (inpkt_t, outpkt_t); 
+								   ZEquals(inhist_t, outhist_t)]);
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t; midhist_t; outhist_t]) ); 
+									      zterm (TApp (TVar sym, [midpkt_t; outpkt_t; midhist_t; outhist_t]))])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) -> 
 		  let modsw = mod_fun Switch in
 		  let modpt = mod_fun (Header SDN_Types.InPort) in
+		  let hist_cons pkt hst = TApp (TVar Pervasives.histcons, [pkt; hst]) in
 		  [ZToplevelComment("this is a link");
-		   ZDeclareRule (sym, [inpkt; outpkt], ZAnd[forwards_pred (Test (Switch, sw1)) inpkt; 
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[forwards_pred (Test (Switch, sw1)) inpkt; 
 							   forwards_pred (Test ((Header SDN_Types.InPort), pt1)) inpkt;
 							   zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2)]));
-							   zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2)]))])]
+							   zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2)]));
+							   ZEquals(outhist_t, hist_cons outpkt_t inhist_t)])]
 		  ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
@@ -239,12 +262,14 @@ let check_reachability  str inp pol outp oko =
   let module Verify = Verify.Stateful(Sat) in
   let x = Pervasives.inpkt in
   let y = Pervasives.outpkt in
+  let hist = Pervasives.outhist in
   let open Sat_Syntax in
+  let hist_singleton pkt = TApp (TVar Pervasives.hist_singleton, [pkt]) in
   let entry_sym = Verify.define_relation pol in
-  let last_rule = ZDeclareRule (Pervasives.qrule, [x;y],
+  let last_rule = ZDeclareRule (Pervasives.qrule, [x;y;hist],
 				    ZAnd[Verify.forwards_pred inp x;
 					     Verify.forwards_pred outp y;
-					     zterm (TApp (TVar entry_sym, [TVar x; TVar y]))] ) in
+					     zterm (TApp (TVar entry_sym, [TVar x; TVar y; hist_singleton (TVar x); TVar hist]))] ) in
   let prog = ZProgram ( List.flatten
 			      [Pervasives.declarations;
 			       ZToplevelComment("rule that puts it all together\n")::last_rule

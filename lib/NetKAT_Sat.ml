@@ -19,6 +19,7 @@ module Sat_Syntax = struct
 	
     type zSort = 
       | SPacket
+      | SHistory
       | SInt
       | SBool
       | SRelation of (zSort list)
@@ -218,6 +219,8 @@ module Sat =
       let x = match s with
 	| SPacket -> 
           Printf.sprintf "_pkt%d" n
+	| SHistory ->
+	  Printf.sprintf "_hist%d" n
 	| SInt -> 
           Printf.sprintf "_n%d" n
 	| SFunction _ -> 
@@ -233,6 +236,8 @@ module Sat =
 	Printf.sprintf "(_ BitVec %d)" bitvec_size
       | SPacket -> 
 	"Packet"
+      | SHistory -> 
+	"Hist"
       | SBool ->
 	"Bool"
       | SFunction(sortlist,sort2) -> 
