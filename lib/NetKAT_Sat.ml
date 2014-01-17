@@ -25,11 +25,13 @@ module Sat_Syntax = struct
       | SRelation of (zSort list)
       | SFunction of (zSort list) * zSort
       | SMacro of ((zVar * zSort) list) * zSort
+      | SLiteral of string
 	  
     type zTerm = 
       | TUnit 
       | TVar of zVar
       | TInt of Int64.t
+      | TLiteral of string
       | TApp of zTerm * (zTerm list)
 	  
     type zFormula =
@@ -41,6 +43,7 @@ module Sat_Syntax = struct
       | ZEquals of zTerm * zTerm
       | ZNotEquals of zTerm * zTerm
       | ZComment of string * zFormula
+      | ZLiteral of string (* plop the string right in *)
 	  
     type zDeclare = 
       | ZDeclareRule of zVar * (zVar list) * zFormula
@@ -250,6 +253,7 @@ module Sat =
 	Printf.sprintf "(%s) %s"
 	  (serialize_arglist args)
 	  (serialize_sort ret)
+      | SLiteral s -> s
       | SRelation (sortlist) ->
 	Printf.sprintf "(%s)"
 	  (intercalate serialize_sort " " sortlist)
@@ -277,6 +281,7 @@ module Sat =
 	| TInt n -> 
 	  Printf.sprintf "%s"
             (tInt_to_string term)
+	| TLiteral s -> s
 	| TApp (term1, terms) -> 
 	  Printf.sprintf "(%s %s)" (serialize_term term1) (intercalate serialize_term " " terms)	    
 
@@ -312,6 +317,7 @@ module Sat =
 	Printf.sprintf "(or %s %s)" (serialize_formula f) (serialize_formula (ZOr(fs)))
       | ZComment(c, f) -> 
 	Printf.sprintf "\n;%s\n%s\n; END %s\n" c (serialize_formula f) c
+      | ZLiteral s -> s
 
     let serialize_declare d = 
       match d with 
