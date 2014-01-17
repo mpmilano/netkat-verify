@@ -224,8 +224,8 @@ module Verify = struct
 		  let pol1_sym = TVar (define_relation pol1) in
 		  [ZToplevelComment("this is a star");
 		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd [ZEquals (inpkt_t, outpkt_t); 
-								   ZEquals(inhist_t, outhist_t)]);
-		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t; midhist_t; outhist_t]) ); 
+									      ZEquals(inhist_t, outhist_t)]);
+		   ZDeclareRule (sym, [inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [inpkt_t; midpkt_t; inhist_t; midhist_t]) ); 
 									      zterm (TApp (TVar sym, [midpkt_t; outpkt_t; midhist_t; outhist_t]))])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) -> 
