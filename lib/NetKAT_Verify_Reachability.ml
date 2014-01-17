@@ -240,7 +240,7 @@ let check_reachability  str inp pol outp oko =
   let x = Pervasives.inpkt in
   let y = Pervasives.outpkt in
   let open Sat_Syntax in
-  let entry_sym = Verify.define_relation (Sat_Utils.remove_links pol) in
+  let entry_sym = Verify.define_relation pol in
   let last_rule = ZDeclareRule (Pervasives.qrule, [x;y],
 				    ZAnd[Verify.forwards_pred inp x;
 					     Verify.forwards_pred outp y;
