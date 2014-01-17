@@ -10,6 +10,13 @@ open NetKAT_Verify_Equivalence
 TEST "simple-check-equivalence" = 
     check_equivalence (Filter(True)) (Filter(True)) "simple-check-equivalence"
 
+TEST "smallest-possible-star" = 
+    verify "smallest-possible-star"
+      (make_packet_1 1)
+      (Star (Seq (Filter (Test (Switch, make_vint 1)), (Mod (Switch, make_vint 3)))))
+      (make_packet_1 2)
+      false
+
 TEST "simple-check" = 
   verify "are tests even running" 
 	(make_packet_2 1 1)
