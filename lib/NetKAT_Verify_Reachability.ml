@@ -77,17 +77,12 @@ module Verify = struct
     (EthSrc "^serialize_sort SInt ^")
     (InPort "^serialize_sort SInt ^")))))
 
-(define-sort Hist () (Array Packet Bool))
-
-(define-fun hist_empty () Hist ((as const Hist) false))
-
-(define-fun in_hist ((x Packet) (s Hist)) Bool (select s x) )
-
-(define-fun hist ((x Packet) (s Hist)) Hist
-  (store s x true))
-
-(define-fun hist-singleton ((p Packet)) Hist (hist p hist_empty))
-
+(declare-datatypes
+ ()
+ ((Hist
+  (hist-singleton (packet Packet))
+  (hist (packet Packet) (rest-hist Hist))
+)))
 " ^ "\n" 
 
     end
