@@ -7,9 +7,6 @@ open NetKAT_Sat.Sat_Utils
 open NetKAT_Verify_Equivalence
 
 
-TEST "simple-check-equivalence" = 
-    check_equivalence (Filter(True)) (Filter(True)) "simple-check-equivalence"
-
 TEST "smallest-possible-star" = 
     verify "smallest-possible-star"
       (make_packet_1 1)
@@ -103,6 +100,18 @@ let tran1 = make_transition (1, 1) (2, 1)
 let tran2 = make_transition (2, 1) (3, 1)
 let topo = combine_topologies [tran1; tran2]
 let pol_topo = starify pol topo
+
+  TEST "collect-constants-1" = 
+  let open NetKAT_Sat in
+  let open NetKAT_Sat.Sat_Syntax in
+  let cfun = (NetKAT_Sat.Sat_Utils.collect_constants 
+     (Seq (Seq(Filter (make_packet_4 1 1 1 3),
+	       make_simple_topology topo),
+	   Filter (make_packet_2 3 1)))) in
+  ((cfun SSwitch) = [make_vint 1; make_vint 2; make_vint 3]) &&
+    ((cfun SEthSrc) = [make_vint 1]) && ((cfun SEthDst) = [make_vint 3]) &&
+    ((cfun SInPort) = [make_vint 1])
+    
 
 
   TEST "dijkstra" = 

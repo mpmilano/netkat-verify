@@ -4,11 +4,6 @@ open NetKAT_Util
 open Unix
 
 
-module type ParameterizedOnInts = 
-sig 
-  val ints : VInt.t list
-end
-
 (* The [Sat] module provides a representation of formulas in
    first-order logic, a representation of packets, and a function for
    testing their satisfiability. *)
@@ -21,6 +16,18 @@ module Sat_Syntax = struct
       | SPacket
       | SHistory
       | SInt
+      | SSwitch
+      | SEthDst
+      | SEthType
+      | SVlan
+      | SVlanPcp
+      | SIPProto
+      | SIP4Src
+      | SIP4Dst
+      | STCPSrcPort
+      | STCPDstPort
+      | SEthSrc
+      | SInPort
       | SBool
       | SRelation of (zSort list)
       | SFunction of (zSort list) * zSort
@@ -31,6 +38,18 @@ module Sat_Syntax = struct
       | TUnit 
       | TVar of zVar
       | TInt of Int64.t
+      | TSwitch of Int64.t
+      | TEthDst of Int64.t
+      | TEthType of Int64.t
+      | TVlan of Int64.t
+      | TVlanPcp of Int64.t
+      | TIPProto of Int64.t
+      | TIP4Src of Int64.t
+      | TIP4Dst of Int64.t
+      | TTCPSrcPort of Int64.t
+      | TTCPDstPort of Int64.t
+      | TEthSrc of Int64.t
+      | TInPort of Int64.t
       | TLiteral of string
       | TApp of zTerm * (zTerm list)
 	  
@@ -66,37 +85,7 @@ module Sat_Utils = struct
       then acc
       else number_of_bits (n asr 1) (acc + 1) in
     number_of_bits n 0
-
-let collect_constants pol : (VInt.t list) = 
-  let module VInt_set = Set.Make(struct 
-    let compare = Pervasives.compare
-    type t = VInt.t
-  end) in
-  
-  let combine a b = VInt_set.union a b in
-  let empty = VInt_set.empty in
-  let single = VInt_set.singleton in
-  let elems l = List.fold_left (fun a x -> VInt_set.add x a) empty l in
-  let rec collect_constants pol = 
-    let rec collect_pred_constants pred = 
-      match pred with
-	| True -> empty
-	| False -> empty
-	| Test (_, v) -> single v
-	| And (a,b) -> combine (collect_pred_constants a) (collect_pred_constants b)
-	| Or (a,b) -> combine (collect_pred_constants a) (collect_pred_constants b)
-	| Neg p -> collect_pred_constants p
-    in
-    match pol with
-      | Link (s1, p1, s2, p2) -> elems [s1;p1;s2;p2]
-      | Filter pred -> collect_pred_constants pred
-      | Mod (_, v) -> single v
-      | Par (l, r) -> combine (collect_constants l) (collect_constants r)
-      | Seq (f, s) -> combine (collect_constants f) (collect_constants s)
-      | Star p -> collect_constants p
-      | Choice (a, b) -> combine (collect_constants a) (collect_constants b) in
-  VInt_set.elements (collect_constants pol)
-
+      
 let rec remove_links (pol : 'a) : 'a = 
   let make_transition (switch1, port1) (switch2, port2) : policy =     
     Seq (Filter (And (Test (Switch, switch1), Test (Header SDN_Types.InPort, port1))), 
@@ -156,6 +145,35 @@ let rec remove_links (pol : 'a) : 'a =
       ; Header TCPDstPort
       ; Switch 
       ]
+
+    let all_fields_zsort = 
+      [ SSwitch 
+      ; SEthDst
+      ; SEthType
+      ; SVlan
+      ; SVlanPcp
+      ; SIPProto
+      ; SIP4Src
+      ; SIP4Dst
+      ; STCPSrcPort
+      ; STCPDstPort
+      ; SEthSrc
+      ; SInPort]
+
+    let header_to_zsort  = function
+	| Header InPort -> SInPort
+	| Header EthSrc -> SEthSrc
+	| Header EthDst -> SEthDst
+	| Header EthType -> SEthType
+	| Header Vlan -> SVlan
+	| Header VlanPcp -> SVlanPcp
+	| Header IPProto -> SIPProto
+	| Header IP4Src -> SIP4Src
+	| Header IP4Dst -> SIP4Dst
+	| Header TCPSrcPort -> STCPSrcPort
+	| Header TCPDstPort -> STCPDstPort
+	| Switch -> SSwitch
+
 	
     let encode_header (header: header) (pkt:zVar) : zTerm =
       match header with
@@ -184,9 +202,71 @@ let rec remove_links (pol : 'a) : 'a =
 	| Switch -> 
           TApp (TVar (serialize_header header), [TVar pkt])
 
-    let encode_vint (v: VInt.t): zTerm = 
-      TInt (VInt.get_int64 v)
+    let encode_vint (v: VInt.t) h : zTerm = 
+      let v = (VInt.get_int64 v) in
+      match h with 
+	| Header InPort -> TInPort v
+	| Header EthSrc -> TEthSrc v
+	| Header EthDst -> TEthDst v
+	| Header EthType -> TEthType v
+	| Header Vlan -> TVlan v
+	| Header VlanPcp -> TVlanPcp v
+	| Header IPProto -> TIPProto v
+	| Header IP4Src -> TIP4Src v
+	| Header IP4Dst -> TIP4Dst v
+	| Header TCPSrcPort -> TTCPSrcPort v
+	| Header TCPDstPort -> TTCPDstPort v
+	| Switch -> TSwitch v
+
+
+  let collect_constants pol : Sat_Syntax.zSort -> (VInt.t list) = 
+    let module Header_VInt_set = Set.Make(struct 
+      let compare = Pervasives.compare
+      type t = (Sat_Syntax.zSort * VInt.t)
+    end) in
+    let module VInt_set = Set.Make(struct 
+      let compare = Pervasives.compare
+      type t = VInt.t
+    end) in
+    
+    let set_hash = Hashtbl.create 0 in
+    let final_hash = Hashtbl.create 0 in
+    let combine a b = Header_VInt_set.union a b in
+    let empty = Header_VInt_set.empty in
+    let single = Header_VInt_set.singleton in
+    let elems l = List.fold_left (fun a x -> Header_VInt_set.add x a) empty l in
+    let rec collect_constants pol = 
+      let rec collect_pred_constants pred = 
+	match pred with
+	  | True -> empty
+	  | False -> empty
+	  | Test (h, v) -> single (header_to_zsort h, v)
+	  | And (a,b) -> combine (collect_pred_constants a) (collect_pred_constants b)
+	  | Or (a,b) -> combine (collect_pred_constants a) (collect_pred_constants b)
+	  | Neg p -> collect_pred_constants p
+      in
+      match pol with
+	| Link (s1, p1, s2, p2) -> elems [SSwitch, s1; SSwitch, s2; SInPort, p1; SInPort, p2]
+	| Filter pred -> collect_pred_constants pred
+	| Mod (f, v) -> single (header_to_zsort f, v)
+	| Par (l, r) -> combine (collect_constants l) (collect_constants r)
+	| Seq (f, s) -> combine (collect_constants f) (collect_constants s)
+	| Star p -> collect_constants p
+	| Choice (a, b) -> combine (collect_constants a) (collect_constants b) in
+    Header_VInt_set.iter 
+      (fun (a,b) -> 
+	try (let old = Hashtbl.find set_hash a in
+	     Hashtbl.replace set_hash a (VInt_set.add b old))
+	with Not_found -> Hashtbl.add set_hash a (VInt_set.singleton b))
+      (collect_constants pol);
+    Hashtbl.iter (fun a b -> Hashtbl.add final_hash a (VInt_set.elements b)) set_hash;
+    (fun x -> try (Hashtbl.find final_hash x) with Not_found -> [])
 	    
+end
+
+module type ParameterizedOnInts = 
+sig 
+  val ints : Sat_Syntax.zSort -> (VInt.t list)
 end
 
 module type Sat_description = 
@@ -198,8 +278,8 @@ sig
   val z3_macro : string -> (Sat_Syntax.zVar * Sat_Syntax.zSort) list -> 
     Sat_Syntax.zSort -> Sat_Syntax.zFormula -> Sat_Syntax.zTerm
   val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar
-  val bitvec_size : int
-  val bitvec_literal : int -> string
+  val bitvec_literal : Sat_Syntax.zSort -> int -> string
+  val bitvec_size : Sat_Syntax.zSort -> int
 end
 
 module Sat = 
@@ -208,7 +288,16 @@ module Sat =
     open Sat_Utils
     open Sat_Syntax
 
-    let bitvec_size = Sat_Utils.number_of_bits ((List.length Int_List.ints) + 1)
+    let bitvec_size = 
+      let hash = Hashtbl.create 0 in
+      List.iter (fun field -> 
+	let ints = Int_List.ints field in
+	match ints with 
+	  | [] -> Hashtbl.add hash field 0
+	  | _ -> Hashtbl.add hash field (Sat_Utils.number_of_bits ((List.length ints) + 1)))
+	all_fields_zsort;
+      Hashtbl.find hash
+
 	  
     (* fresh variables *)
     let fresh_cell = ref []
@@ -226,6 +315,30 @@ module Sat =
 	  Printf.sprintf "_hist%d" n
 	| SInt -> 
           Printf.sprintf "_n%d" n
+	| SSwitch -> 
+	  Printf.sprintf "_sw%d" n
+	| SEthDst -> 
+	  Printf.sprintf "_ed%d" n
+	| SEthType -> 
+          Printf.sprintf "_et%d" n
+	| SVlan ->
+	  Printf.sprintf "_vl%d" n
+	| SVlanPcp -> 
+	  Printf.sprintf "_vlpcp%d" n
+	| SIPProto -> 
+          Printf.sprintf "_ip%d" n
+	| SIP4Src ->
+          Printf.sprintf "_ip4src%d" n
+	| SIP4Dst -> 
+	  Printf.sprintf "_ip4dst%d" n
+	| STCPSrcPort -> 
+          Printf.sprintf "_tcpsrc%d" n
+	| STCPDstPort ->
+          Printf.sprintf "_tcpdst%d" n
+	| SEthSrc ->
+          Printf.sprintf "_ethsrc%d" n
+	| SInPort ->
+          Printf.sprintf "_inprt%d" n
 	| SFunction _ -> 
           Printf.sprintf "_f%d" n 
 	| SRelation _ -> 
@@ -236,7 +349,31 @@ module Sat =
 	
     let rec serialize_sort = function
       | SInt -> 
-	Printf.sprintf "(_ BitVec %d)" bitvec_size
+	Printf.sprintf "SInt"      
+      | SSwitch -> 
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SSwitch)
+      | SEthDst ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthDst)
+      | SEthType ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthType)
+      | SVlan ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SVlan)
+      | SVlanPcp ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SVlanPcp)
+      | SIPProto ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIPProto)
+      | SIP4Src ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIP4Src)
+      | SIP4Dst ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIP4Dst)
+      | STCPSrcPort ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size STCPSrcPort)
+      | STCPDstPort ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size STCPDstPort)
+      | SEthSrc ->
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthSrc)
+      | SInPort -> 
+	Printf.sprintf "(_ BitVec %d)" (bitvec_size SInPort)
       | SPacket -> 
 	"Packet"
       | SHistory -> 
@@ -261,14 +398,47 @@ module Sat =
     let serialize_arglist args = 
       (intercalate (fun (a, t) -> Printf.sprintf "(%s %s)" a (serialize_sort t)) " " args)
 	
-    let bitvec_literal n = 
-      (Printf.sprintf "(_ bv%u %u)" n bitvec_size)
+    let bitvec_literal s n = 
+      (Printf.sprintf "(_ bv%u %u)" n (bitvec_size s))
 	
     let tInt_to_string = 
-      let numbers_map = Hashtbl.create 0 in
-      List.iteri (fun i x -> Hashtbl.add numbers_map (VInt.get_int64 x) i) Int_List.ints;
+      let switch_map = Hashtbl.create 0 in
+      let ethdst_map = Hashtbl.create 0 in
+      let ethtype_map = Hashtbl.create 0 in
+      let vlan_map = Hashtbl.create 0 in
+      let vlanpcp_map = Hashtbl.create 0 in
+      let ipproto_map = Hashtbl.create 0 in
+      let ip4src_map = Hashtbl.create 0 in
+      let ip4dst_map = Hashtbl.create 0 in
+      let tcpsrcport_map = Hashtbl.create 0 in
+      let tcpdstport_map = Hashtbl.create 0 in
+      let ethsrc_map = Hashtbl.create 0 in
+      let inport_map = Hashtbl.create 0 in
+      List.iteri (fun i x -> Hashtbl.add switch_map (VInt.get_int64 x) i) (Int_List.ints SSwitch);
+      List.iteri (fun i x -> Hashtbl.add ethdst_map (VInt.get_int64 x) i) (Int_List.ints SEthDst);
+      List.iteri (fun i x -> Hashtbl.add ethtype_map (VInt.get_int64 x) i) (Int_List.ints SEthType);
+      List.iteri (fun i x -> Hashtbl.add vlan_map (VInt.get_int64 x) i) (Int_List.ints SVlan);
+      List.iteri (fun i x -> Hashtbl.add vlanpcp_map (VInt.get_int64 x) i) (Int_List.ints SVlanPcp);
+      List.iteri (fun i x -> Hashtbl.add ipproto_map (VInt.get_int64 x) i) (Int_List.ints SIPProto);
+      List.iteri (fun i x -> Hashtbl.add ip4src_map (VInt.get_int64 x) i) (Int_List.ints SIP4Src);
+      List.iteri (fun i x -> Hashtbl.add ip4dst_map (VInt.get_int64 x) i) (Int_List.ints SIP4Dst);
+      List.iteri (fun i x -> Hashtbl.add tcpsrcport_map (VInt.get_int64 x) i) (Int_List.ints STCPSrcPort);
+      List.iteri (fun i x -> Hashtbl.add tcpdstport_map (VInt.get_int64 x) i) (Int_List.ints STCPDstPort);
+      List.iteri (fun i x -> Hashtbl.add ethsrc_map (VInt.get_int64 x) i) (Int_List.ints SEthSrc);
+      List.iteri (fun i x -> Hashtbl.add inport_map (VInt.get_int64 x) i) (Int_List.ints SInPort);
       let tInt_to_string = function
-	| TInt n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find numbers_map n) bitvec_size)
+        | TSwitch n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find switch_map n) (bitvec_size SSwitch))
+	| TEthDst n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethdst_map n) (bitvec_size SEthDst))
+	| TEthType n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethtype_map n) (bitvec_size SEthType))
+	| TVlan n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find vlan_map n) (bitvec_size SVlan))
+	| TVlanPcp n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find vlanpcp_map n) (bitvec_size SVlanPcp))
+	| TIPProto n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ipproto_map n) (bitvec_size SIPProto))
+	| TIP4Src n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ip4src_map n) (bitvec_size SIP4Src))
+	| TIP4Dst n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ip4dst_map n) (bitvec_size SIP4Dst))
+	| TTCPSrcPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find tcpsrcport_map n) (bitvec_size STCPSrcPort))
+	| TTCPDstPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find tcpdstport_map n) (bitvec_size STCPDstPort))
+	| TEthSrc n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethsrc_map n) (bitvec_size SEthSrc))
+	| TInPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find inport_map n) (bitvec_size SInPort))
 	| _ -> failwith "wasn't a tint" in
       tInt_to_string
 	
@@ -279,11 +449,11 @@ module Sat =
 	| TVar x -> 
 	  x
 	| TInt n -> 
-	  Printf.sprintf "%s"
-            (tInt_to_string term)
+	  Int64.to_string n
 	| TLiteral s -> s
 	| TApp (term1, terms) -> 
-	  Printf.sprintf "(%s %s)" (serialize_term term1) (intercalate serialize_term " " terms)	    
+	  Printf.sprintf "(%s %s)" (serialize_term term1) (intercalate serialize_term " " terms)
+	| _ -> tInt_to_string term
 
     let rec serialize_formula = function
       | ZNoop -> ""

@@ -43,9 +43,6 @@ module Verify = struct
 " startpkt endpkt full_hist)
     end
       
-      
-    let sint () = SInt
-      
     let zterm x = ZEquals(x, TVar "true") 
       
   end
@@ -64,18 +61,18 @@ module Verify = struct
  () 
  ((Packet
    (packet
-    (Switch "^serialize_sort SInt ^")
-    (EthDst "^serialize_sort SInt ^")
-    (EthType "^serialize_sort SInt ^")
-    (Vlan "^serialize_sort SInt ^")
-    (VlanPcp "^serialize_sort SInt ^")
-    (IPProto "^serialize_sort SInt ^")
-    (IP4Src "^serialize_sort SInt ^")
-    (IP4Dst "^serialize_sort SInt ^")
-    (TCPSrcPort "^serialize_sort SInt ^")
-    (TCPDstPort "^serialize_sort SInt ^")
-    (EthSrc "^serialize_sort SInt ^")
-    (InPort "^serialize_sort SInt ^")))))
+"^(if (bitvec_size SSwitch) = 0 then "" else "    (Switch "^serialize_sort SSwitch ^") ")
+^(if (bitvec_size SEthDst) = 0 then "" else "    (EthDst "^serialize_sort SEthDst ^") ")
+^(if (bitvec_size SEthType) = 0 then "" else "    (EthType "^serialize_sort SEthType ^") ")
+^(if (bitvec_size SVlan) = 0 then "" else "    (Vlan "^serialize_sort SVlan ^") ")
+^(if (bitvec_size SVlanPcp) = 0 then "" else "    (VlanPcp "^serialize_sort SVlanPcp ^") ")
+^(if (bitvec_size SIPProto) = 0 then "" else "    (IPProto "^serialize_sort SIPProto ^") ")
+^(if (bitvec_size SIP4Src) = 0 then "" else "    (IP4Src "^serialize_sort SIP4Src ^") ")
+^(if (bitvec_size SIP4Dst) = 0 then "" else "    (IP4Dst "^serialize_sort SIP4Dst ^") ")
+^(if (bitvec_size STCPSrcPort) = 0 then "" else "    (TCPSrcPort "^serialize_sort STCPSrcPort ^") ")
+^(if (bitvec_size STCPDstPort) = 0 then "" else "    (TCPDstPort "^serialize_sort STCPDstPort ^") ")
+^(if (bitvec_size SEthSrc) = 0 then "" else "    (EthSrc "^serialize_sort SEthSrc ^") ")
+^(if (bitvec_size SInPort) = 0 then "" else "    (InPort "^serialize_sort SInPort ^"))))) ")^ " 
 
 (declare-datatypes
  ()
@@ -87,7 +84,7 @@ module Verify = struct
 
     end
       
-
+    let all_used_fields = List.filter (fun x -> (Sat.bitvec_size (header_to_zsort x)) > 0) all_fields
     
     let encode_packet_equals = 
       let open Sat in
@@ -106,7 +103,7 @@ module Verify = struct
 			acc 
 		      else
 			ZEquals ( (encode_header hd "x"), ( encode_header hd "y"))::acc)
-		    [] all_fields in 
+		    [] all_used_fields in 
 		let new_except = (z3_macro_top ("packet_equals_except_" ^ (serialize_header except) )
 				    [("x", SPacket);("y", SPacket)] SBool  
 				    (ZAnd(l))) in
@@ -126,7 +123,7 @@ module Verify = struct
 	with Not_found -> 
 	  let macro = 
 	    z3_macro ((serialize_header f) ^ name_suffix)
-	      [("x", SPacket); ("v", sint ())] SBool 
+	      [("x", SPacket); ("v",  (header_to_zsort f))] SBool 
 	      (if want_true 
 	       then
 		  (ZEquals ( (encode_header f "x"),  (TVar "v")))
@@ -144,7 +141,7 @@ module Verify = struct
 	  | Neg p -> forwards_pred p
 	  | False -> ZTrue
 	  | True -> ZFalse
-	  | Test (hdr, v) -> zterm (TApp (pred_test_not hdr, [TVar pkt; encode_vint v])) 
+	  | Test (hdr, v) -> zterm (TApp (pred_test_not hdr, [TVar pkt; encode_vint v hdr])) 
 	  | And (pred1, pred2) -> ZOr [in_a_neg pred1; in_a_neg pred1]
 	  | Or (pred1, pred2) -> ZAnd [in_a_neg pred1; in_a_neg pred2] in
       match prd with
@@ -152,7 +149,7 @@ module Verify = struct
 	  ZFalse
 	| True -> 
 	  ZTrue
-	| Test (hdr, v) -> zterm (TApp (pred_test hdr, [TVar pkt; encode_vint v]))
+	| Test (hdr, v) -> zterm (TApp (pred_test hdr, [TVar pkt; encode_vint v hdr]))
 	| Neg p -> in_a_neg p
 	| And (pred1, pred2) -> 
 	  (ZAnd [forwards_pred pred1; 
@@ -169,7 +166,8 @@ module Verify = struct
 	let packet_equals_fun = encode_packet_equals (TVar "x") (TVar "y") f in
 	try (Hashtbl.find hashmap packet_equals_fun)
 	with Not_found -> 
-	  let macro = z3_macro ("mod_" ^ (serialize_header f)) [("x", SPacket); ("y", SPacket); ("v", sint ())] SBool 
+	  let macro = z3_macro ("mod_" ^ (serialize_header f)) [("x", SPacket); ("y", SPacket); 
+								("v", (header_to_zsort f) )] SBool 
 	    (
 	      ZAnd [zterm packet_equals_fun;
 		    ZEquals( (encode_header f "y"),  (TVar "v"))]) in
@@ -213,7 +211,7 @@ module Verify = struct
 		| Mod(f,v) -> 
 		  let modfn = mod_fun f in
 		  [ZToplevelComment("this is a mod");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v)]));
+		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v f)]));
 									      ZEquals(inhist_t, outhist_t);
 									      ZLiteral(Printf.sprintf "(> %s 0)" k)])]
 		| Par (pol1, pol2) -> 
@@ -251,8 +249,8 @@ module Verify = struct
 		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], 
 				 ZAnd[forwards_pred (Test (Switch, sw1)) inpkt; 
 				      forwards_pred (Test ((Header SDN_Types.InPort), pt1)) inpkt;
-				      zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2)]));
-				      zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2)]));
+				      zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2 Switch)]));
+				      zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2 (Header SDN_Types.InPort))]));
 				      ZEquals(outhist_t, hist_cons outpkt_t inhist_t);
 				      ZLiteral(Printf.sprintf "(> %s 0)" k)])]
 	      ) in
@@ -286,7 +284,7 @@ let check_reachability  str inp pol outp oko =
   let last_rule = ZDeclareRule (Pervasives.qrule, [x;y;hist],
 				    ZAnd[Verify.forwards_pred inp x;
 					     Verify.forwards_pred outp y;
-					     zterm (TApp (TVar entry_sym, [TLiteral "2";TVar x; TVar y; hist_singleton (TVar x); TVar hist]))] ) in
+					     zterm (TApp (TVar entry_sym, [TLiteral "3";TVar x; TVar y; hist_singleton (TVar x); TVar hist]))] ) in
   let prog = ZProgram ( List.flatten
 			      [Pervasives.declarations;
 			       ZToplevelComment("rule that puts it all together\n")::last_rule
