@@ -53,6 +53,8 @@ module Verify = struct
     open Sat_Utils
     open Stateless
 
+    let all_used_fields = List.filter (fun x -> (Sat.bitvec_size (header_to_zsort x)) > 0) all_fields
+
     module Z3Pervasives = struct
       open Sat
       let declare_datatypes : string = 
@@ -61,30 +63,25 @@ module Verify = struct
  () 
  ((Packet
    (packet
-"^(if (bitvec_size SSwitch) = 0 then "" else "    (Switch "^serialize_sort SSwitch ^") ")
-^(if (bitvec_size SEthDst) = 0 then "" else "    (EthDst "^serialize_sort SEthDst ^") ")
-^(if (bitvec_size SEthType) = 0 then "" else "    (EthType "^serialize_sort SEthType ^") ")
-^(if (bitvec_size SVlan) = 0 then "" else "    (Vlan "^serialize_sort SVlan ^") ")
-^(if (bitvec_size SVlanPcp) = 0 then "" else "    (VlanPcp "^serialize_sort SVlanPcp ^") ")
-^(if (bitvec_size SIPProto) = 0 then "" else "    (IPProto "^serialize_sort SIPProto ^") ")
-^(if (bitvec_size SIP4Src) = 0 then "" else "    (IP4Src "^serialize_sort SIP4Src ^") ")
-^(if (bitvec_size SIP4Dst) = 0 then "" else "    (IP4Dst "^serialize_sort SIP4Dst ^") ")
-^(if (bitvec_size STCPSrcPort) = 0 then "" else "    (TCPSrcPort "^serialize_sort STCPSrcPort ^") ")
-^(if (bitvec_size STCPDstPort) = 0 then "" else "    (TCPDstPort "^serialize_sort STCPDstPort ^") ")
-^(if (bitvec_size SEthSrc) = 0 then "" else "    (EthSrc "^serialize_sort SEthSrc ^") ")
-^(if (bitvec_size SInPort) = 0 then "" else "    (InPort "^serialize_sort SInPort ^"))))) ")^ " 
+"^(List.fold_left
+     (fun a hdr -> Printf.sprintf "(%s %s)\n%s" 
+       (serialize_header hdr) 
+       (serialize_sort (header_to_zsort hdr))
+       a)
+     "" all_used_fields)
+   ^"))))
 
 (declare-datatypes
  ()
  ((Hist
-  (hist-singleton (packet Packet))
   (hist (packet Packet) (rest-hist Hist))
+  (hist-singleton (packet Packet))
+
 )))
-" ^ "\n" 
+" 
 
     end
-      
-    let all_used_fields = List.filter (fun x -> (Sat.bitvec_size (header_to_zsort x)) > 0) all_fields
+     
     
     let encode_packet_equals = 
       let open Sat in

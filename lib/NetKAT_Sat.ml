@@ -147,7 +147,8 @@ let rec remove_links (pol : 'a) : 'a =
       ]
 
     let all_fields_zsort = 
-      [ SSwitch 
+      [ SInPort 
+      ; SEthSrc
       ; SEthDst
       ; SEthType
       ; SVlan
@@ -157,8 +158,7 @@ let rec remove_links (pol : 'a) : 'a =
       ; SIP4Dst
       ; STCPSrcPort
       ; STCPDstPort
-      ; SEthSrc
-      ; SInPort]
+      ; SSwitch ]
 
     let header_to_zsort  = function
 	| Header InPort -> SInPort
@@ -174,49 +174,27 @@ let rec remove_links (pol : 'a) : 'a =
 	| Header TCPDstPort -> STCPDstPort
 	| Switch -> SSwitch
 
+    let header_to_zterm = function
+	| Header InPort -> (fun x -> TInPort x)
+	| Header EthSrc -> (fun x -> TEthSrc x)
+	| Header EthDst -> (fun x -> TEthDst x)
+	| Header EthType -> (fun x -> TEthType x)
+	| Header Vlan -> (fun x -> TVlan x)
+	| Header VlanPcp -> (fun x -> TVlanPcp x)
+	| Header IPProto -> (fun x -> TIPProto x)
+	| Header IP4Src -> (fun x -> TIP4Src x)
+	| Header IP4Dst -> (fun x -> TIP4Dst x)
+	| Header TCPSrcPort -> (fun x -> TTCPSrcPort x)
+	| Header TCPDstPort -> (fun x -> TTCPDstPort x)
+	| Switch -> (fun x -> TSwitch x)
+
 	
-    let encode_header (header: header) (pkt:zVar) : zTerm =
-      match header with
-	| Header InPort -> 
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header EthSrc -> 
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header EthDst -> 
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header EthType ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header Vlan ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header VlanPcp ->
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header IPProto ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header IP4Src ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header IP4Dst ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header TCPSrcPort ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Header TCPDstPort ->  
-          TApp (TVar (serialize_header header), [TVar pkt])
-	| Switch -> 
-          TApp (TVar (serialize_header header), [TVar pkt])
+    let encode_header (header: header) (pkt:zVar) : zTerm = 
+      TApp (TVar (serialize_header header), [TVar pkt])
 
     let encode_vint (v: VInt.t) h : zTerm = 
       let v = (VInt.get_int64 v) in
-      match h with 
-	| Header InPort -> TInPort v
-	| Header EthSrc -> TEthSrc v
-	| Header EthDst -> TEthDst v
-	| Header EthType -> TEthType v
-	| Header Vlan -> TVlan v
-	| Header VlanPcp -> TVlanPcp v
-	| Header IPProto -> TIPProto v
-	| Header IP4Src -> TIP4Src v
-	| Header IP4Dst -> TIP4Dst v
-	| Header TCPSrcPort -> TTCPSrcPort v
-	| Header TCPDstPort -> TTCPDstPort v
-	| Switch -> TSwitch v
+      ((header_to_zterm h) v)
 
 
   let collect_constants pol : Sat_Syntax.zSort -> (VInt.t list) = 
@@ -309,71 +287,25 @@ module Sat =
       let l = !fresh_cell in  
       let n = List.length l in 
       let x = match s with
+	| SMacro _ -> failwith "macros need not use fresh"
+	| SLiteral _ -> failwith "literals should not use fresh"
 	| SPacket -> 
           Printf.sprintf "_pkt%d" n
 	| SHistory ->
 	  Printf.sprintf "_hist%d" n
-	| SInt -> 
-          Printf.sprintf "_n%d" n
-	| SSwitch -> 
-	  Printf.sprintf "_sw%d" n
-	| SEthDst -> 
-	  Printf.sprintf "_ed%d" n
-	| SEthType -> 
-          Printf.sprintf "_et%d" n
-	| SVlan ->
-	  Printf.sprintf "_vl%d" n
-	| SVlanPcp -> 
-	  Printf.sprintf "_vlpcp%d" n
-	| SIPProto -> 
-          Printf.sprintf "_ip%d" n
-	| SIP4Src ->
-          Printf.sprintf "_ip4src%d" n
-	| SIP4Dst -> 
-	  Printf.sprintf "_ip4dst%d" n
-	| STCPSrcPort -> 
-          Printf.sprintf "_tcpsrc%d" n
-	| STCPDstPort ->
-          Printf.sprintf "_tcpdst%d" n
-	| SEthSrc ->
-          Printf.sprintf "_ethsrc%d" n
-	| SInPort ->
-          Printf.sprintf "_inprt%d" n
 	| SFunction _ -> 
           Printf.sprintf "_f%d" n 
 	| SRelation _ -> 
 	  Printf.sprintf "_r%d" n
-	| _ -> failwith "not implemented in fresh" in 
+	| _ -> 
+          Printf.sprintf "_n%d" n
+in 
       fresh_cell := ZDeclareVar(x,s)::l;
       x
 	
-    let rec serialize_sort = function
+    let rec serialize_sort srt = match srt with
       | SInt -> 
 	Printf.sprintf "SInt"      
-      | SSwitch -> 
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SSwitch)
-      | SEthDst ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthDst)
-      | SEthType ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthType)
-      | SVlan ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SVlan)
-      | SVlanPcp ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SVlanPcp)
-      | SIPProto ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIPProto)
-      | SIP4Src ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIP4Src)
-      | SIP4Dst ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SIP4Dst)
-      | STCPSrcPort ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size STCPSrcPort)
-      | STCPDstPort ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size STCPDstPort)
-      | SEthSrc ->
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SEthSrc)
-      | SInPort -> 
-	Printf.sprintf "(_ BitVec %d)" (bitvec_size SInPort)
       | SPacket -> 
 	"Packet"
       | SHistory -> 
@@ -394,6 +326,8 @@ module Sat =
       | SRelation (sortlist) ->
 	Printf.sprintf "(%s)"
 	  (intercalate serialize_sort " " sortlist)
+      | _ -> Printf.sprintf "(_ BitVec %d)" (bitvec_size srt)
+
 	  
     let serialize_arglist args = 
       (intercalate (fun (a, t) -> Printf.sprintf "(%s %s)" a (serialize_sort t)) " " args)
@@ -402,43 +336,26 @@ module Sat =
       (Printf.sprintf "(_ bv%u %u)" n (bitvec_size s))
 	
     let tInt_to_string = 
-      let switch_map = Hashtbl.create 0 in
-      let ethdst_map = Hashtbl.create 0 in
-      let ethtype_map = Hashtbl.create 0 in
-      let vlan_map = Hashtbl.create 0 in
-      let vlanpcp_map = Hashtbl.create 0 in
-      let ipproto_map = Hashtbl.create 0 in
-      let ip4src_map = Hashtbl.create 0 in
-      let ip4dst_map = Hashtbl.create 0 in
-      let tcpsrcport_map = Hashtbl.create 0 in
-      let tcpdstport_map = Hashtbl.create 0 in
-      let ethsrc_map = Hashtbl.create 0 in
-      let inport_map = Hashtbl.create 0 in
-      List.iteri (fun i x -> Hashtbl.add switch_map (VInt.get_int64 x) i) (Int_List.ints SSwitch);
-      List.iteri (fun i x -> Hashtbl.add ethdst_map (VInt.get_int64 x) i) (Int_List.ints SEthDst);
-      List.iteri (fun i x -> Hashtbl.add ethtype_map (VInt.get_int64 x) i) (Int_List.ints SEthType);
-      List.iteri (fun i x -> Hashtbl.add vlan_map (VInt.get_int64 x) i) (Int_List.ints SVlan);
-      List.iteri (fun i x -> Hashtbl.add vlanpcp_map (VInt.get_int64 x) i) (Int_List.ints SVlanPcp);
-      List.iteri (fun i x -> Hashtbl.add ipproto_map (VInt.get_int64 x) i) (Int_List.ints SIPProto);
-      List.iteri (fun i x -> Hashtbl.add ip4src_map (VInt.get_int64 x) i) (Int_List.ints SIP4Src);
-      List.iteri (fun i x -> Hashtbl.add ip4dst_map (VInt.get_int64 x) i) (Int_List.ints SIP4Dst);
-      List.iteri (fun i x -> Hashtbl.add tcpsrcport_map (VInt.get_int64 x) i) (Int_List.ints STCPSrcPort);
-      List.iteri (fun i x -> Hashtbl.add tcpdstport_map (VInt.get_int64 x) i) (Int_List.ints STCPDstPort);
-      List.iteri (fun i x -> Hashtbl.add ethsrc_map (VInt.get_int64 x) i) (Int_List.ints SEthSrc);
-      List.iteri (fun i x -> Hashtbl.add inport_map (VInt.get_int64 x) i) (Int_List.ints SInPort);
+      let hashmap = Hashtbl.create 0 in
+      List.iter (fun hdr -> 
+	let hdr_map = Hashtbl.create 0 in
+	List.iteri (fun i x -> Hashtbl.add hdr_map (VInt.get_int64 x) i) (Int_List.ints hdr);
+	Hashtbl.add hashmap hdr hdr_map) all_fields_zsort;
+      let to_string n hdr = 
+	(Printf.sprintf "(_ bv%d %d)" (Hashtbl.find (Hashtbl.find hashmap hdr) n) (bitvec_size hdr)) in
       let tInt_to_string = function
-        | TSwitch n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find switch_map n) (bitvec_size SSwitch))
-	| TEthDst n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethdst_map n) (bitvec_size SEthDst))
-	| TEthType n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethtype_map n) (bitvec_size SEthType))
-	| TVlan n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find vlan_map n) (bitvec_size SVlan))
-	| TVlanPcp n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find vlanpcp_map n) (bitvec_size SVlanPcp))
-	| TIPProto n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ipproto_map n) (bitvec_size SIPProto))
-	| TIP4Src n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ip4src_map n) (bitvec_size SIP4Src))
-	| TIP4Dst n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ip4dst_map n) (bitvec_size SIP4Dst))
-	| TTCPSrcPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find tcpsrcport_map n) (bitvec_size STCPSrcPort))
-	| TTCPDstPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find tcpdstport_map n) (bitvec_size STCPDstPort))
-	| TEthSrc n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find ethsrc_map n) (bitvec_size SEthSrc))
-	| TInPort n -> (Printf.sprintf "(_ bv%d %d)" (Hashtbl.find inport_map n) (bitvec_size SInPort))
+        | TSwitch n -> to_string n SSwitch
+	| TEthDst n -> to_string n SEthDst
+	| TEthType n -> to_string n SEthType
+	| TVlan n -> to_string n SVlan
+	| TVlanPcp n -> to_string n SVlanPcp
+	| TIPProto n -> to_string n SIPProto
+	| TIP4Src n -> to_string n SIP4Src
+	| TIP4Dst n -> to_string n SIP4Dst
+	| TTCPSrcPort n -> to_string n STCPSrcPort
+	| TTCPDstPort n -> to_string n STCPDstPort
+	| TEthSrc n -> to_string n SEthSrc
+	| TInPort n -> to_string n SInPort
 	| _ -> failwith "wasn't a tint" in
       tInt_to_string
 	
