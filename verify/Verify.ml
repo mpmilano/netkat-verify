@@ -11,38 +11,42 @@ type parseType =
 type mode = 
   | Equiv
   | Reach
+  | Pushbutton_Reach
 
 let parseType = ref NetKAT
 let mode = ref Reach
 let parse_things = ref []
 let run_name = ref []
   
-let usage = "usage: verify [-f NetKAT|GML|Dot] [-m equiv|reach] run-name [inp pol outp] [prog1 prog2]"
+let usage = "usage: verify [-f NetKAT|GML|Dot] [-m equiv|reach] [-p ] run-name [inp pol outp] [prog1 prog2]"
 
   
 (* from http://rosettacode.org/wiki/Command-line_arguments#OCaml *)
-let speclist = [
+let speclist = 
+  let pushbutton () = mode := Pushbutton_Reach in
+  [
   ("-f", Arg.String (fun s -> 
     parseType := match s with 
-      | "NetKAT" -> NetKAT 
-      | "GML" -> GML 
-	  | "Dot" -> Dot
-      | _ -> failwith (Printf.sprintf "not supported: %s" s)
-   ),      ": format to expect for parsing ");
-  ("-m", Arg.String    (fun s -> 
-    mode := match s with
-      | "equiv" -> Equiv
-      | "equivalence" -> Equiv
-      | "reach" -> Reach
-      | "reachability" -> Reach
-      | _ -> failwith (Printf.sprintf "not supported: %s" s)
-   ),      ": algorithm to run");
+    | "NetKAT" -> NetKAT 
+    | "GML" -> GML 
+	| "Dot" -> Dot
+    | _ -> failwith (Printf.sprintf "not supported: %s" s)
+					),      ": format to expect for parsing ");
+   ("-m", Arg.String    (fun s -> 
+	 if (!mode) = Pushbutton_Reach then () else
+     mode := match s with
+     | "equiv" -> Equiv
+     | "equivalence" -> Equiv
+     | "reach" -> Reach
+     | "reachability" -> Reach
+     | _ -> failwith (Printf.sprintf "not supported: %s" s)
+						),      ": algorithm to run");
+   ("-p", Arg.Unit pushbutton, "enable push-button mode")
 ]
 
 let parse_program_from_file str = 
   let from_topo topo = 
 	let pol = PolicyGenerator.all_pairs_shortest_paths topo in
-	Printf.printf "Policy: %s\n" (NetKAT_Pretty.string_of_policy pol);
 	pol in
   match (!parseType) with 
   | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string str)
@@ -83,6 +87,7 @@ let _ =
     usage; match (!mode),(!parse_things) with 
       | Equiv,[hd;tl] -> ()
       | Reach, [hd;mid;tl] -> ()
+	  | Pushbutton_Reach, [pol] -> ()
       | _ -> failwith (Printf.sprintf "incorrect number of arguments supplied for selected run type:\n%s" usage)
 
 let _ = match (!mode) with
@@ -99,3 +104,8 @@ let _ = match (!mode) with
     if check_reachability (List.hd (!run_name)) inp prog outp (Some true)
     then Printf.printf "Sat: path found.\n"
     else Printf.printf "Unsat: path impossible.\n"
+  | Pushbutton_Reach ->
+	  let prog = List.hd (List.map parse_program_from_file (!parse_things)) in
+	  if check_reachability_pushbutton (List.hd (!run_name)) prog 
+	  then Printf.printf "sat\n" 
+	  else Printf.printf "unsat\n"

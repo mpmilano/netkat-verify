@@ -318,8 +318,7 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 *)
 
 
-let check_reachability  str inp pol outp oko =
-  let ints = (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp))) in
+let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Sat(struct let ints = ints end) in
   let module Verify = Verify(struct let enable_history = false end) in
   let open Verify.Stateless in
@@ -338,5 +337,18 @@ let check_reachability  str inp pol outp oko =
 			       ::ZToplevelComment("syntactically-generated rules\n")::(Verify.get_rules())] ) in
   let query = Z3Pervasives.reachability_query in
   Sat.run_solve oko Verify.Z3Z3Pervasives.declare_datatypes prog query  str
+	
+let check_reachability str inp pol outp oko = 
+  let ints = (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp))) in
+  check_reachability_ints ints str inp pol outp oko
 
-  let check = check_reachability
+
+let check = check_reachability
+	
+let check_reachability_pushbutton str pol = 
+  let open NetKAT_Sat.Sat_Syntax in
+  let ints = Sat_Utils.collect_constants pol in
+  let inp = Test (Switch, (List.hd (List.rev (ints SSwitch)))) in
+  let outp = Test (Switch, (List.hd (ints SSwitch))) in
+  check_reachability_ints ints str inp pol outp (Some true)
+  
