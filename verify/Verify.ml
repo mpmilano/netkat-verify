@@ -1,10 +1,12 @@
 open NetKAT_Verify_Reachability
 open NetKAT_Verify_Equivalence
 open NetKAT_Types
+open NetKAT_Util
 
 type parseType = 
   | NetKAT
   | GML
+  | Dot
       
 type mode = 
   | Equiv
@@ -15,7 +17,7 @@ let mode = ref Reach
 let parse_things = ref []
 let run_name = ref []
   
-let usage = "usage: verify [-f NetKAT|GML] [-m equiv|reach] run-name [inp pol outp] [prog1 prog2]"
+let usage = "usage: verify [-f NetKAT|GML|Dot] [-m equiv|reach] run-name [inp pol outp] [prog1 prog2]"
 
   
 (* from http://rosettacode.org/wiki/Command-line_arguments#OCaml *)
@@ -24,6 +26,7 @@ let speclist = [
     parseType := match s with 
       | "NetKAT" -> NetKAT 
       | "GML" -> GML 
+	  | "Dot" -> Dot
       | _ -> failwith (Printf.sprintf "not supported: %s" s)
    ),      ": format to expect for parsing ");
   ("-m", Arg.String    (fun s -> 
@@ -36,19 +39,37 @@ let speclist = [
    ),      ": algorithm to run");
 ]
 
-let parse_program str = 
+let parse_program_from_file str = 
+  let from_topo topo = 
+	let pol = PolicyGenerator.all_pairs_shortest_paths topo in
+	Printf.printf "Policy: %s\n" (NetKAT_Pretty.string_of_policy pol);
+	pol in
   match (!parseType) with 
   | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string str)
-  | GML -> PolicyGenerator.all_pairs_shortest_paths(Topology.from_gmlfile str)
+  | GML -> from_topo (Topology.from_gmlfile str)
+  | Dot -> from_topo (Topology.from_dotfile str)
 
 let parse_predicate str = match NetKAT_Parser.program NetKAT_Lexer.token 
     (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
   | Filter (pred) -> pred
   | _ -> failwith "huh, parsing must have failed"
 
+let read_file fname = 
+  let lines = ref [] in
+  let chan = open_in fname in 
+  try 
+	while true; do
+	  lines := input_line chan :: 
+		!lines
+	done; []
+  with End_of_file -> 
+	close_in chan;
+	List.rev !lines;;
+
 let parse_reach_args argl = 
   match argl with
-    | [outp;pol;inp] -> parse_predicate inp, parse_program pol, parse_predicate outp
+    | [outp;pol_file;inp] -> 
+		parse_predicate inp, parse_program_from_file pol_file, parse_predicate outp
     | _ -> failwith (Printf.sprintf "incorrect arguments to reachability.\n%s" usage)
 
 
@@ -66,7 +87,7 @@ let _ =
 
 let _ = match (!mode) with
   | Equiv -> 
-    let prog1, prog2 = match List.map parse_program (!parse_things) with
+    let prog1, prog2 = match List.map parse_program_from_file (!parse_things) with
       | [prog1;prog2] -> prog1,prog2
       | _ -> failwith (Printf.sprintf "incorrect arguments supplied to equiv.\n%s" usage) in
     if check_equivalence prog1 prog2 (List.hd (!run_name))
