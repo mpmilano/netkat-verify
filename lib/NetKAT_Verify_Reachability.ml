@@ -4,8 +4,13 @@ open NetKAT_Util
 open Unix
 open NetKAT_Sat
 
-  
-module Verify = struct
+module type Enable_History = 
+  sig 
+    val enable_history : bool 
+  end
+
+module Verify = functor (Enable_History : Enable_History) -> struct
+
   module Stateless = struct
     open Sat_Syntax
     open Sat_Utils
@@ -25,22 +30,29 @@ module Verify = struct
       let histcons = "hist"
       let qrule = "q"
       let k = "k_bound"
-      let declarations = [ZDeclareVar(startpkt, SPacket);
-			  ZDeclareVar(endpkt, SPacket);
-			  ZDeclareVar(full_hist, SHistory);
-			  ZDeclareVar(inpkt, SPacket);
-			  ZDeclareVar(midpkt, SPacket);
-			  ZDeclareVar(outpkt, SPacket);
-			  ZDeclareVar(inhist,SHistory);
-			  ZDeclareVar(midhist,SHistory);
-			  ZDeclareVar(outhist,SHistory);
-			  ZDeclareVar(qrule, SRelation([SPacket; SPacket; SHistory]));
-			  ZDeclareVar(k,SLiteral "Int")]
-      let reachability_query = (Printf.sprintf "(query (q %s %s %s) 
+      let declarations = List.flatten [[ZDeclareVar(startpkt, SPacket);
+					ZDeclareVar(k,SLiteral "Int");
+					ZDeclareVar(endpkt, SPacket);
+					ZDeclareVar(inpkt, SPacket);
+					ZDeclareVar(midpkt, SPacket);
+					ZDeclareVar(outpkt, SPacket)];
+				       (if Enable_History.enable_history
+					then [
+					  ZDeclareVar(full_hist, SHistory);
+					  ZDeclareVar(inhist,SHistory);
+					  ZDeclareVar(midhist,SHistory);
+					  ZDeclareVar(outhist,SHistory);
+					  ZDeclareVar(qrule, SRelation([SPacket; SPacket; SHistory]))]
+					else [ZDeclareVar(qrule, SRelation([SPacket; SPacket]))])]
+				       
+      let reachability_query = 
+	let engine_string = "
 :default-relation smt_relation2
 :engine PDR
-:print-answer false)
-" startpkt endpkt full_hist)
+:print-answer false" in
+	match Enable_History.enable_history with
+	  | true -> (Printf.sprintf "(query (q %s %s %s) %s)"  startpkt endpkt full_hist engine_string)
+	  | false -> (Printf.sprintf "(query (q %s %s) %s)"  startpkt endpkt engine_string)
     end
       
     let zterm x = ZEquals(x, TVar "true") 
@@ -70,8 +82,9 @@ module Verify = struct
        a)
      "" all_used_fields)
    ^"))))
-
-(declare-datatypes
+"^
+if Enable_History.enable_history then
+"(declare-datatypes
  ()
  ((Hist
   (hist (packet Packet) (rest-hist Hist))
@@ -79,6 +92,7 @@ module Verify = struct
 
 )))
 " 
+else ""
 
     end
      
@@ -164,12 +178,12 @@ module Verify = struct
 	try (Hashtbl.find hashmap packet_equals_fun)
 	with Not_found -> 
 	  let macro = z3_macro ("mod_" ^ (serialize_header f)) [("x", SPacket); ("y", SPacket); 
-								("v", (header_to_zsort f) )] SBool 
+								("v", (header_to_zsort f) )] SBool
 	    (
 	      ZAnd [zterm packet_equals_fun;
 		    ZEquals( (encode_header f "y"),  (TVar "v"))]) in
 	  Hashtbl.add hashmap packet_equals_fun macro; 
-	  (Hashtbl.find hashmap packet_equals_fun) in	
+	  (Hashtbl.find hashmap packet_equals_fun) in
       mod_fun 
 
     let define_relation, get_rules = 
@@ -195,47 +209,79 @@ module Verify = struct
 	try 
 	  fst (Hashtbl.find hashtbl pol)
 	with Not_found -> 
-	  let sym = fresh (SRelation [SLiteral "Int"; SPacket; SPacket; SHistory; SHistory]) in
+	  let sym = fresh (if Enable_History.enable_history
+	    then (SRelation [SLiteral "Int"; SPacket; SPacket; SHistory; SHistory])
+	    else (SRelation [SLiteral "Int"; SPacket; SPacket]) )in
+	  let open Enable_History in
+	  let param_list = if enable_history then 
+	      [k; inpkt; outpkt; inhist; outhist]
+	    else
+	      [k; inpkt; outpkt] in
 	  let rules = 
 	    ZToplevelComment (NetKAT_Pretty.string_of_policy pol)::
 	      (match pol with 
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd [forwards_pred pred inpkt; 
-									      ZEquals( inpkt_t,  outpkt_t );
-									      ZEquals(inhist_t, outhist_t);
-									      ZLiteral(Printf.sprintf "(> %s 0)" k)])]
+		   ZDeclareRule (sym, param_list , 
+				 ZAnd ([forwards_pred pred inpkt; 
+					ZEquals( inpkt_t,  outpkt_t );
+					ZLiteral(Printf.sprintf "(> %s 0)" k)] @ 
+					  (if enable_history 
+					   then [ZEquals(inhist_t, outhist_t)]
+					   else [])))]
 		| Mod(f,v) -> 
 		  let modfn = mod_fun f in
 		  [ZToplevelComment("this is a mod");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v f)]));
-									      ZEquals(inhist_t, outhist_t);
-									      ZLiteral(Printf.sprintf "(> %s 0)" k)])]
+		   ZDeclareRule (sym, param_list, ZAnd([ zterm (TApp (modfn, [inpkt_t; outpkt_t; (encode_vint v f)]));
+									      ZLiteral(Printf.sprintf "(> %s 0)" k)] @
+							  (if enable_history 
+							   then [ZEquals(inhist_t, outhist_t)]
+							   else [])))]
 		| Par (pol1, pol2) -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  let pol2_sym = TVar (define_relation pol2) in
+		  let arg_list = if enable_history then
+		      [k_t; inpkt_t; outpkt_t; inhist_t; outhist_t]
+		    else
+		      [k_t; inpkt_t; outpkt_t] in
  		  [ZToplevelComment("this is a par");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd [zterm (TApp (pol1_sym, [k_t; inpkt_t; outpkt_t; inhist_t; outhist_t]));
+		   ZDeclareRule (sym, param_list, ZAnd [zterm (TApp (pol1_sym, arg_list));
 										 ZLiteral(Printf.sprintf "(> %s 0)" k)]); 
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol2_sym, [k_t; inpkt_t; outpkt_t; inhist_t; outhist_t]));
+		   ZDeclareRule (sym, param_list, ZAnd[ zterm (TApp (pol2_sym, arg_list));
 										 ZLiteral(Printf.sprintf "(> %s 0)" k)])]
 		| Seq (pol1, pol2) -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  let pol2_sym = TVar (define_relation pol2) in
+		  let arg_list_1 = if enable_history then
+		      [k_t; inpkt_t; midpkt_t; inhist_t; midhist_t]
+		    else
+		      [k_t; inpkt_t; midpkt_t] in
+		  let arg_list_2 = if enable_history then
+		      [k_t; midpkt_t; outpkt_t; midhist_t; outhist_t]
+		    else
+		      [k_t; midpkt_t; outpkt_t] in
  		  [ZToplevelComment("this is a seq");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [k_t; inpkt_t; midpkt_t; inhist_t; midhist_t])); 
-										 zterm (TApp (pol2_sym, [k_t; midpkt_t; outpkt_t; midhist_t; outhist_t]));
+		   ZDeclareRule (sym, param_list, ZAnd[ zterm (TApp (pol1_sym, arg_list_1)); 
+										 zterm (TApp (pol2_sym, arg_list_2));
 										 ZLiteral(Printf.sprintf "(> %s 0)" k)])]
 		| Star pol1  -> 
 		  let pol1_sym = TVar (define_relation pol1) in
 		  [ZToplevelComment("this is a star");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd [ZEquals (inpkt_t, outpkt_t); 
-										 ZEquals(inhist_t, outhist_t);
-										 ZLiteral(Printf.sprintf "(> %s 0)" k)]);
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], ZAnd[ zterm (TApp (pol1_sym, [k_t; inpkt_t; midpkt_t; inhist_t; midhist_t]) ); 
-										 zterm (TApp (TVar sym, [
-										   TLiteral (Printf.sprintf "(- %s 1)" k); 
-										   midpkt_t; outpkt_t; midhist_t; outhist_t]));
+		   ZDeclareRule (sym, param_list, ZAnd ([ZEquals (inpkt_t, outpkt_t); 
+							 ZLiteral(Printf.sprintf "(> %s 0)" k)]
+							@ if enable_history then [ZEquals(inhist_t, outhist_t)]
+							  else []));
+		   let new_k = TLiteral (Printf.sprintf "(- %s 1)" k) in
+		   let arg_list_1 = if enable_history then
+		       [k_t; inpkt_t; midpkt_t; inhist_t; midhist_t]
+		     else
+		       [k_t; inpkt_t; midpkt_t] in
+		   let arg_list_2 = if enable_history then 
+		       [new_k; midpkt_t; outpkt_t; midhist_t; outhist_t]
+		     else
+		       [new_k; midpkt_t; outpkt_t] in
+		   ZDeclareRule (sym, param_list, ZAnd[ zterm (TApp (pol1_sym, arg_list_1) ); 
+										 zterm (TApp (TVar sym, arg_list_2));
 										 ZLiteral(Printf.sprintf "(> %s 0)" k)])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) -> 
@@ -243,13 +289,15 @@ module Verify = struct
 		  let modpt = mod_fun (Header SDN_Types.InPort) in
 		  let hist_cons pkt hst = TApp (TVar Pervasives.histcons, [pkt; hst]) in
 		  [ZToplevelComment("this is a link");
-		   ZDeclareRule (sym, [k; inpkt; outpkt; inhist; outhist], 
-				 ZAnd[forwards_pred (Test (Switch, sw1)) inpkt; 
+		   ZDeclareRule (sym, param_list, 
+				 ZAnd([forwards_pred (Test (Switch, sw1)) inpkt; 
 				      forwards_pred (Test ((Header SDN_Types.InPort), pt1)) inpkt;
 				      zterm (TApp (modsw, [inpkt_t; midpkt_t; (encode_vint sw2 Switch)]));
 				      zterm (TApp (modpt, [midpkt_t; outpkt_t; (encode_vint pt2 (Header SDN_Types.InPort))]));
-				      ZEquals(outhist_t, hist_cons outpkt_t inhist_t);
-				      ZLiteral(Printf.sprintf "(> %s 0)" k)])]
+				      ZLiteral(Printf.sprintf "(> %s 0)" k)]
+				      @ if enable_history then 
+					  [ZEquals(outhist_t, hist_cons outpkt_t inhist_t)]
+					else []))]
 	      ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
@@ -270,18 +318,17 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let check_reachability  str inp pol outp oko =
   let ints = (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp))) in
   let module Sat = Sat(struct let ints = ints end) in
+  let module Verify = Verify(struct let enable_history = false end) in
   let open Verify.Stateless in
   let module Verify = Verify.Stateful(Sat) in
   let x = Pervasives.inpkt in
   let y = Pervasives.outpkt in
-  let hist = Pervasives.outhist in
   let open Sat_Syntax in
-  let hist_singleton pkt = TApp (TVar Pervasives.hist_singleton, [pkt]) in
   let entry_sym = Verify.define_relation pol in
-  let last_rule = ZDeclareRule (Pervasives.qrule, [x;y;hist],
+  let last_rule = ZDeclareRule (Pervasives.qrule, [x;y],
 				    ZAnd[Verify.forwards_pred inp x;
 					     Verify.forwards_pred outp y;
-					     zterm (TApp (TVar entry_sym, [TLiteral "3";TVar x; TVar y; hist_singleton (TVar x); TVar hist]))] ) in
+					     zterm (TApp (TVar entry_sym, [TLiteral "3";TVar x; TVar y]))] ) in
   let prog = ZProgram ( List.flatten
 			      [Pervasives.declarations;
 			       ZToplevelComment("rule that puts it all together\n")::last_rule
