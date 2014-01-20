@@ -36,13 +36,16 @@ let speclist = [
    ),      ": algorithm to run");
 ]
 
-let parse_program str = match (!parseType) with 
+let parse_program str = 
+  match (!parseType) with 
   | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string str)
-  | GML -> failwith "GML not currently supported"
+  | GML -> PolicyGenerator.all_pairs_shortest_paths(Topology.from_gmlfile str)
+
 let parse_predicate str = match NetKAT_Parser.program NetKAT_Lexer.token 
     (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
   | Filter (pred) -> pred
   | _ -> failwith "huh, parsing must have failed"
+
 let parse_reach_args argl = 
   match argl with
     | [outp;pol;inp] -> parse_predicate inp, parse_program pol, parse_predicate outp
