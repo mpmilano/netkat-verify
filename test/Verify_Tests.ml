@@ -876,39 +876,39 @@ TEST "benchmark" =
   (fun () -> 
     let inpt = (make_packet_2 2 2) in
     let outp = (make_packet_2 1 1) in
-    let start_time : float = Unix.time () in 
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "1" inpt (make_simple_topology topology_0) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "5" inpt (make_simple_topology topology_5) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "10" inpt (make_simple_topology topology_10) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "20" inpt (make_simple_topology topology_20) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "30" inpt (make_simple_topology topology_30) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "40" inpt (make_simple_topology topology_40) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "50" inpt (make_simple_topology topology_50) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "60" inpt (make_simple_topology topology_60) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "70" inpt (make_simple_topology topology_70) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "80" inpt (make_simple_topology topology_80) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
-    let start_time : float = Unix.time () in 
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
+    let start_time : float = Unix.gettimeofday () in 
     let _ = (verify "90" inpt (make_simple_topology topology_90) outp false) in
-    print_string (Printf.sprintf "time: %f\n" (Unix.time () -. start_time));
+    print_string (Printf.sprintf "time: %f\n" (Unix.gettimeofday () -. start_time));
 
     
   ) (); true

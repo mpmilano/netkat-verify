@@ -18,7 +18,7 @@ let verify (description: string) (initial_state: pred) (program: policy)
     (NetKAT_Pretty.string_of_policy program)
     (NetKAT_Pretty.string_of_pred final_state)
     desired_outcome; close_out oc;
-  check description initial_state program final_state (Some desired_outcome)
+  (check description initial_state program final_state (Some desired_outcome))
 	  
 
 (* let verify_history (description: string) (initial_state: pred) (program: policy) expr (final_state: pred) (desired_outcome: bool) : bool = 

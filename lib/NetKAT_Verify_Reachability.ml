@@ -340,7 +340,7 @@ let check_reachability_ints ints str inp pol outp oko =
 	
 let check_reachability str inp pol outp oko = 
   let ints = (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp))) in
-  check_reachability_ints ints str inp pol outp oko
+  fst(check_reachability_ints ints str inp pol outp oko)
 
 
 let check = check_reachability
@@ -351,5 +351,12 @@ let check_reachability_pushbutton str pol =
   let inp = Test (Switch, (List.hd (List.rev (ints SSwitch)))) in
   let outp = Test (Switch, (List.hd (ints SSwitch))) in
   Printf.printf "Input: %s\nOutput: %s\n" (NetKAT_Pretty.string_of_pred inp) (NetKAT_Pretty.string_of_pred outp);
-  check_reachability_ints ints str inp pol outp (Some true)
+  let res,tm = 
+	check_reachability_ints ints str inp pol outp (Some true) in
+  let times = Unix.times() in
+  let ocaml_utime = times.tms_utime in
+  let ocaml_stime = times.tms_stime in
+  Printf.printf "Z3 execution time: %f\nOcaml user execution time: %f\nOcaml system execution time: %f\n" tm ocaml_utime ocaml_stime;
+  res
+	  
   

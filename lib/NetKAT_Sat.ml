@@ -462,11 +462,12 @@ in
       z3_macro, z3_macro_top
 
 
-    let solve pervasives prog query: bool = 
+    let solve pervasives prog query: bool * float = 
       let s = (serialize_program pervasives prog query) in
       let z3_out,z3_in = open_process "z3 -in -smt2 -nw" in 
       let _ = output_string z3_in s in
       let _ = flush z3_in in 
+	  let start_time = Unix.gettimeofday () in
       let _ = close_out z3_in in 
       let b = Buffer.create 17 in 
       (try
@@ -475,24 +476,24 @@ in
            Buffer.add_char b '\n';
 	 done
        with End_of_file -> ());
-      Buffer.contents b = "sat\n"
+      Buffer.contents b = "sat\n", (Unix.gettimeofday ()) -. start_time
 
-    let run_solve oko pervasives prog query str : bool =
+    let run_solve oko pervasives prog query str : bool * float =
       let file = Printf.sprintf "%s%sdebug-%s.rkt" (Filename.get_temp_dir_name ()) Filename.dir_sep str in
       let oc = open_out (file) in 
       Printf.fprintf oc "%s\n;This is the program corresponding to %s\n" (serialize_program pervasives prog query) str;
       close_out oc;
       let run_result = (
     match oko, solve pervasives prog query with
-      | Some (ok : bool), (sat : bool) ->
+      | Some (ok : bool), ((sat : bool), tm) ->
         if ok = sat then
-	  true
+	  true, tm
         else
             (Printf.printf "[Verify.check %s: expected %b got %b]\n%!" str ok sat; 
 	     Printf.printf "Offending program is in %s\n" file;
-	     false)
-      | None, sat ->
-        (Printf.printf "[Verify.check %s: %b]\n%!" str sat; false)) in
+	     false, tm)
+      | None, (sat,tm) ->
+        (Printf.printf "[Verify.check %s: %b]\n%!" str sat; false, tm)) in
       run_result 
 
   end
