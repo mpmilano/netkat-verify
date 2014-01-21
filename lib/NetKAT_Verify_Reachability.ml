@@ -350,5 +350,6 @@ let check_reachability_pushbutton str pol =
   let ints = Sat_Utils.collect_constants pol in
   let inp = Test (Switch, (List.hd (List.rev (ints SSwitch)))) in
   let outp = Test (Switch, (List.hd (ints SSwitch))) in
+  Printf.printf "Input: %s\nOutput: %s\n" (NetKAT_Pretty.string_of_pred inp) (NetKAT_Pretty.string_of_pred outp);
   check_reachability_ints ints str inp pol outp (Some true)
   
