@@ -167,61 +167,65 @@ module Verify = struct
       let open Sat in
       let hashmap = Hashtbl.create 0 in
       let mod_fun f =  
-	let packet_equals_fun = encode_packet_equals (TVar "x") (TVar "y") f in
-	try (Hashtbl.find hashmap packet_equals_fun)
-	with Not_found -> 
+	try (Hashtbl.find hashmap f)
+	with Not_found ->
+ 	  let packet_equals_fun = encode_packet_equals (TVar "x") (TVar "y") f in
 	  let macro = z3_macro ("mod_" ^ (serialize_header f)) [("x", SPacket); ("y", SPacket); 
 								("v", (header_to_zsort f) )] SBool 
 	    (
 	      ZAnd [zterm packet_equals_fun;
 		    ZEquals( (encode_header f "y"),  (TVar "v"))]) in
-	  Hashtbl.add hashmap packet_equals_fun macro; 
-	  (Hashtbl.find hashmap packet_equals_fun) in	
-      mod_fun 
+	  Hashtbl.add hashmap f macro; 
+	  (Hashtbl.find hashmap f) in
+      mod_fun
 
     let define_relation, get_rules = 
       let open Sat in
-	  let open Stateless.Z3Pervasives in
+      let open Stateless.Z3Pervasives in
       let hashtbl = Hashtbl.create 0 in
     (*convenience names *)
       let inhist_t = TVar inhist in
       let outhist_t = TVar outhist in
       let midhist_t = TVar midhist in
-	  let default_params = [inhist; outhist] in
+      let default_params = [inhist; outhist] in
+      let mod_fun f inh outh v = let mf = mod_fun f in  
+		       TApp(mf, [inh; outh; v]) in
 
       let rec define_relation pol = 
 	try 
 	  fst (Hashtbl.find hashtbl pol)
 	with Not_found -> 
 	  let sym = fresh (SRelation [SHistory; SHistory]) in
+	  let make_rule body = ZDeclareRule (sym, default_params, body) in
+	  let apply_pol pol inh outh = TApp (TVar (define_relation pol), [inh; outh]) in
 	  let rules = 
 	    ZToplevelComment (NetKAT_Pretty.string_of_policy pol)::
 	      (match pol with 
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");
 		   ZDeclareRule (sym, default_params, 
-						 ZAnd [forwards_pred pred (hist_head inhist_t);
-							   ZEquals(inhist_t, outhist_t)])]
+				 ZAnd [forwards_pred pred (hist_head inhist_t);
+				       ZEquals(inhist_t, outhist_t)])]
 		| Mod(f,v) -> 
-		  let modfn inp outp v  = TApp (mod_fun f, [inp; outp; v]) in
+		  let modfn = mod_fun f in
 		  [ZToplevelComment("this is a mod");
 		   ZDeclareRule (sym, default_params, 
-						 ZAnd[ zterm (modfn (hist_head inhist_t) (hist_head outhist_t) (encode_vint v f));
-							   zterm (tail_equal inhist_t outhist_t)])]
+				 ZAnd[ zterm (modfn (hist_head inhist_t) (hist_head outhist_t) (encode_vint v f));
+				       zterm (tail_equal inhist_t outhist_t)])]
 		| Par (pol1, pol2) -> 
-		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
-		  let pol2_sym inh outh = TApp (TVar (define_relation pol2), [inh; outh]) in
+		  let pol1_sym = apply_pol pol1 in 
+		  let pol2_sym = apply_pol pol2 in 
  		  [ZToplevelComment("this is a par");
 		   ZDeclareRule (sym, default_params, zterm (pol1_sym inhist_t outhist_t));
 		   ZDeclareRule (sym, default_params, zterm (pol2_sym inhist_t outhist_t))]
 		| Seq (pol1, pol2) -> 
-		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
-		  let pol2_sym inh outh = TApp (TVar (define_relation pol2), [inh; outh]) in
+		  let pol1_sym = apply_pol pol1 in 
+		  let pol2_sym = apply_pol pol2 in 
  		  [ZToplevelComment("this is a seq");
 		   ZDeclareRule (sym, default_params, ZAnd[ zterm (pol1_sym inhist_t midhist_t); 
-													zterm (pol2_sym midhist_t outhist_t)])]
+							    zterm (pol2_sym midhist_t outhist_t)])]
 		| Star pol1  -> 
-		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
+		  let pol1_sym = apply_pol pol1 in 
 		  let this_sym inh outh = TApp (TVar sym, [inh; outh]) in
 		  [ZToplevelComment("this is a star");
 		   ZDeclareRule (sym, default_params, ZEquals(inhist_t, outhist_t));
@@ -229,8 +233,8 @@ module Verify = struct
 													zterm (this_sym midhist_t outhist_t)])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) ->
-		  let modsw inp outp v = TApp (mod_fun Switch, [inp; outp; v]) in
-		  let modpt inp outp v = TApp (mod_fun (Header SDN_Types.InPort), [inp; outp; v]) in
+		  let modsw = mod_fun Switch in
+		  let modpt = mod_fun (Header SDN_Types.InPort) in
 		  let the_packet_a_t = TVar the_packet_a in
 		  let the_packet_b_t = TVar the_packet_b in
 		  [ZToplevelComment("this is a link");
