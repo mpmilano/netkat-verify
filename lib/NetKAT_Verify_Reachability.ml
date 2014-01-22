@@ -11,16 +11,16 @@ module Verify = struct
     open Sat_Utils
       
       
-    module Pervasives = struct
+    module Z3Pervasives = struct
 	  let the_packet_a = "the_packet_a"
 	  let the_packet_b = "the_packet_b"
       let inhist = "inhist"
       let midhist = "midhist"
       let outhist = "outhist"
-      let hist_one = "hist-one"
-      let hist_cons = "hist-cons"
-	  let hist_head = "hist-head"
-	  let tail_equal = "tail-equal"
+      let hist_one x = TApp (TVar "hist-one", [x])
+      let hist_cons hd tl = TApp (TVar "hist-cons", [hd; tl])
+	  let hist_head h = TApp (TVar "hist-head", [h])
+	  let tail_equal a b = TApp (TVar "tail-equal", [a;b])
       let qrule = "q"
       let declarations = [
 		ZDeclareVar(inhist,SHistory);
@@ -35,6 +35,7 @@ module Verify = struct
 :print-answer false)
 " inhist outhist)
     end
+	open Z3Pervasives
       
     let zterm x = ZEquals(x, TVar "true")
       
@@ -180,16 +181,12 @@ module Verify = struct
 
     let define_relation, get_rules = 
       let open Sat in
+	  let open Stateless.Z3Pervasives in
       let hashtbl = Hashtbl.create 0 in
     (*convenience names *)
-      let inhist = Pervasives.inhist in
       let inhist_t = TVar inhist in
-      let outhist = Pervasives.outhist in
       let outhist_t = TVar outhist in
-      let midhist = Pervasives.midhist in
       let midhist_t = TVar midhist in
-	  let hist_head = TVar Pervasives.hist_head in
-	  let tail_equal = TVar Pervasives.tail_equal in
 	  let default_params = [inhist; outhist] in
 
       let rec define_relation pol = 
@@ -203,47 +200,46 @@ module Verify = struct
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");
 		   ZDeclareRule (sym, default_params, 
-						 ZAnd [forwards_pred pred 
-								 (TApp (hist_head, [inhist_t])); 
+						 ZAnd [forwards_pred pred (hist_head inhist_t);
 							   ZEquals(inhist_t, outhist_t)])]
 		| Mod(f,v) -> 
-		  let modfn = mod_fun f in
+		  let modfn inp outp v  = TApp (mod_fun f, [inp; outp; v]) in
 		  [ZToplevelComment("this is a mod");
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (TApp (modfn, [TApp (hist_head, [inhist_t]); 
-																		 TApp (hist_head, [outhist_t]); (encode_vint v f)]));
-													zterm (TApp (tail_equal, [inhist_t; outhist_t]))])]
+		   ZDeclareRule (sym, default_params, 
+						 ZAnd[ zterm (modfn (hist_head inhist_t) (hist_head outhist_t) (encode_vint v f));
+							   zterm (tail_equal inhist_t outhist_t)])]
 		| Par (pol1, pol2) -> 
-		  let pol1_sym = TVar (define_relation pol1) in
-		  let pol2_sym = TVar (define_relation pol2) in
+		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
+		  let pol2_sym inh outh = TApp (TVar (define_relation pol2), [inh; outh]) in
  		  [ZToplevelComment("this is a par");
-		   ZDeclareRule (sym, default_params, ZAnd [zterm (TApp (pol1_sym, [inhist_t; outhist_t]))]); 
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (TApp (pol2_sym, [inhist_t; outhist_t]))])]
+		   ZDeclareRule (sym, default_params, zterm (pol1_sym inhist_t outhist_t));
+		   ZDeclareRule (sym, default_params, zterm (pol2_sym inhist_t outhist_t))]
 		| Seq (pol1, pol2) -> 
-		  let pol1_sym = TVar (define_relation pol1) in
-		  let pol2_sym = TVar (define_relation pol2) in
+		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
+		  let pol2_sym inh outh = TApp (TVar (define_relation pol2), [inh; outh]) in
  		  [ZToplevelComment("this is a seq");
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (TApp (pol1_sym, [inhist_t; midhist_t])); 
-													zterm (TApp (pol2_sym, [midhist_t; outhist_t]))])]
+		   ZDeclareRule (sym, default_params, ZAnd[ zterm (pol1_sym inhist_t midhist_t); 
+													zterm (pol2_sym midhist_t outhist_t)])]
 		| Star pol1  -> 
-		  let pol1_sym = TVar (define_relation pol1) in
+		  let pol1_sym inh outh = TApp (TVar (define_relation pol1), [inh; outh]) in
+		  let this_sym inh outh = TApp (TVar sym, [inh; outh]) in
 		  [ZToplevelComment("this is a star");
 		   ZDeclareRule (sym, default_params, ZEquals(inhist_t, outhist_t));
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (TApp (pol1_sym, [inhist_t; midhist_t]));
-													zterm (TApp (TVar sym, [midhist_t; outhist_t]))])]
+		   ZDeclareRule (sym, default_params, ZAnd[ zterm (pol1_sym inhist_t midhist_t);
+													zterm (this_sym midhist_t outhist_t)])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) ->
-		  let modsw = mod_fun Switch in
-		  let modpt = mod_fun (Header SDN_Types.InPort) in
-		  let the_packet_a_t = TVar Pervasives.the_packet_a in
-		  let the_packet_b_t = TVar Pervasives.the_packet_b in
-		  let hist_cons = TVar Pervasives.hist_cons in
+		  let modsw inp outp v = TApp (mod_fun Switch, [inp; outp; v]) in
+		  let modpt inp outp v = TApp (mod_fun (Header SDN_Types.InPort), [inp; outp; v]) in
+		  let the_packet_a_t = TVar the_packet_a in
+		  let the_packet_b_t = TVar the_packet_b in
 		  [ZToplevelComment("this is a link");
 		   ZDeclareRule (sym, default_params, 
-				 ZAnd[forwards_pred (Test (Switch, sw1)) (TApp (hist_head, [inhist_t]));
-				      forwards_pred (Test ((Header SDN_Types.InPort), pt1)) (TApp (hist_head, [inhist_t]));
-					  zterm (TApp (modsw, [TApp (hist_head, [inhist_t]); the_packet_a_t; (encode_vint sw2 Switch)]));
-					  zterm (TApp (modpt, [the_packet_a_t; the_packet_b_t; (encode_vint pt2 (Header SDN_Types.InPort))]));
-					  ZEquals(TApp (hist_cons, [the_packet_b_t; inhist_t]), outhist_t)])]
+				 ZAnd[forwards_pred (Test (Switch, sw1)) (hist_head inhist_t);
+				      forwards_pred (Test ((Header SDN_Types.InPort), pt1)) (hist_head inhist_t);
+					  zterm (modsw (hist_head inhist_t) the_packet_a_t (encode_vint sw2 Switch));
+					  zterm (modpt the_packet_a_t the_packet_b_t (encode_vint pt2 (Header SDN_Types.InPort)));
+					  ZEquals(hist_cons the_packet_b_t inhist_t, outhist_t)])]
 	      ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
@@ -275,23 +271,23 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Sat(struct let ints = ints end) in
   let open Verify.Stateless in
+  let open Verify.Stateless.Z3Pervasives in
   let module Verify = Verify.Stateful(Sat) in
   let open Sat_Syntax in
-  let x = Pervasives.inhist in
+  let x = inhist in
   let x_t = TVar x in
-  let y = Pervasives.outhist in
+  let y = outhist in
   let y_t = TVar y in
-  let hist_head h= TApp (TVar Pervasives.hist_head, [h]) in
   let entry_sym = Verify.define_relation pol in
-  let last_rule = ZDeclareRule (Pervasives.qrule, [x;y],
+  let last_rule = ZDeclareRule (qrule, [x;y],
 				    ZAnd[Verify.forwards_pred inp (hist_head x_t);
 					     Verify.forwards_pred outp (hist_head y_t);
 					     zterm (TApp (TVar entry_sym, [TVar x; TVar y]))] ) in
   let prog = ZProgram ( List.flatten
-			      [Pervasives.declarations;
+			      [declarations;
 			       ZToplevelComment("rule that puts it all together\n")::last_rule
 			       ::ZToplevelComment("syntactically-generated rules\n")::(Verify.get_rules())] ) in
-  let query = Pervasives.reachability_query in
+  let query = reachability_query in
   Sat.run_solve oko Verify.Z3Pervasives.declare_datatypes prog query  str
 
 let check_reachability str inp pol outp = 
