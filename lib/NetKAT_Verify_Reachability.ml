@@ -294,9 +294,10 @@ let check_reachability_ints ints str inp pol outp oko =
   let query = Pervasives.reachability_query in
   Sat.run_solve oko Verify.Z3Pervasives.declare_datatypes prog query  str
 
-let check_reachability = 
+let check_reachability str inp pol outp = 
   check_reachability_ints 
 	(Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp)))
+	str inp pol outp
 
 let check = check_reachability
 

@@ -485,7 +485,7 @@ in
       close_out oc;
       let run_result = (
     match oko, solve pervasives prog query with
-      | Some (ok : bool), (sat : bool, tm) ->
+      | Some (ok : bool), ((sat : bool), tm) ->
         if ok = sat then
 	  true,tm
         else
