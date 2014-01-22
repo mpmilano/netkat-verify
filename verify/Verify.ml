@@ -44,12 +44,24 @@ let speclist =
    ("-p", Arg.Unit pushbutton, "enable push-button mode")
 ]
 
+let read_file (fname : string) : string = 
+  let lines = ref [] in
+  let chan = open_in fname in 
+  try 
+	while true; do
+	  lines := input_line chan :: 
+		!lines
+	done; ""
+  with End_of_file -> 
+	close_in chan;
+	(intercalate (fun x -> x) "\n" (List.rev !lines))
+
 let parse_program_from_file str = 
   let from_topo topo = 
 	let pol = PolicyGenerator.all_pairs_shortest_paths topo in
 	pol in
   match (!parseType) with 
-  | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string str)
+  | NetKAT -> NetKAT_Parser.program NetKAT_Lexer.token (Lexing.from_string (read_file str))
   | GML -> from_topo (Topology.from_gmlfile str)
   | Dot -> from_topo (Topology.from_dotfile str)
 
@@ -57,18 +69,6 @@ let parse_predicate str = match NetKAT_Parser.program NetKAT_Lexer.token
     (Lexing.from_string (Printf.sprintf "(filter %s)" str)) with
   | Filter (pred) -> pred
   | _ -> failwith "huh, parsing must have failed"
-
-let read_file fname = 
-  let lines = ref [] in
-  let chan = open_in fname in 
-  try 
-	while true; do
-	  lines := input_line chan :: 
-		!lines
-	done; []
-  with End_of_file -> 
-	close_in chan;
-	List.rev !lines;;
 
 let parse_reach_args argl = 
   match argl with

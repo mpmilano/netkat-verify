@@ -10,14 +10,19 @@ let make_vint v = VInt.Int64 (Int64.of_int v)
 
 let verify (description: string) (initial_state: pred) (program: policy) 
     (final_state: pred) (desired_outcome: bool) : bool = 
-  let oc = open_out (Printf.sprintf "%s%sdebug-%s.kat" 
-		       (Filename.get_temp_dir_name ()) Filename.dir_sep description) in
-  Printf.fprintf oc "Name:%s\nInput:%s\nProgram:%s\nOutput:%s\nResult:%b\n" 
+  let kat_loc = Printf.sprintf "%s%sdebug-%s.kat" 
+	  (Filename.get_temp_dir_name ()) Filename.dir_sep description in
+  let preamble_loc = Printf.sprintf "%s%sdebug-%s.verify" 
+	  (Filename.get_temp_dir_name ()) Filename.dir_sep description in
+  let oc = open_out kat_loc in
+  let oc2 = open_out preamble_loc in
+  Printf.fprintf oc "%s" (NetKAT_Pretty.string_of_policy program);
+  Printf.fprintf oc2 "Name:%s\nInput:%s\nProgram:%s\nOutput:%s\nResult:%b\n" 
     description
     (NetKAT_Pretty.string_of_pred initial_state)
-    (NetKAT_Pretty.string_of_policy program)
+    kat_loc
     (NetKAT_Pretty.string_of_pred final_state)
-    desired_outcome; close_out oc;
+    desired_outcome; close_out oc; close_out oc2;
   fst(check description initial_state program final_state (Some desired_outcome))
 
 	  
