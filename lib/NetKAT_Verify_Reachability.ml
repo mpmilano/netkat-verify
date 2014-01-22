@@ -12,8 +12,8 @@ module Verify = struct
       
       
     module Z3Pervasives = struct
-	  let the_packet_a = "the_packet_a"
-	  let the_packet_b = "the_packet_b"
+	  let packet_a = "packet_a"
+	  let packet_b = "packet_b"
       let inhist = "inhist"
       let midhist = "midhist"
       let outhist = "outhist"
@@ -26,8 +26,8 @@ module Verify = struct
 		ZDeclareVar(inhist,SHistory);
 		ZDeclareVar(midhist,SHistory);
 		ZDeclareVar(outhist,SHistory);
-		ZDeclareVar(the_packet_a,SPacket);
-		ZDeclareVar(the_packet_b,SPacket);
+		ZDeclareVar(packet_a,SPacket);
+		ZDeclareVar(packet_b,SPacket);
 		ZDeclareVar(qrule, SRelation([SHistory; SHistory]))]
       let reachability_query = (Printf.sprintf "(query (q %s %s) 
 :default-relation smt_relation2
@@ -203,63 +203,50 @@ module Verify = struct
 	      (match pol with 
 		| Filter pred -> 
 		  [ZToplevelComment("this is a filter");
-		   ZDeclareRule (sym, default_params, 
-				 ZAnd [forwards_pred pred (hist_head inhist_t);
-				       ZEquals(inhist_t, outhist_t)])]
+		   make_rule (ZAnd [forwards_pred pred (hist_head inhist_t);
+				    ZEquals(inhist_t, outhist_t)])]
 		| Mod(f,v) -> 
 		  let modfn = mod_fun f in
 		  [ZToplevelComment("this is a mod");
-		   ZDeclareRule (sym, default_params, 
-				 ZAnd[ zterm (modfn (hist_head inhist_t) (hist_head outhist_t) (encode_vint v f));
-				       zterm (tail_equal inhist_t outhist_t)])]
+		   make_rule (ZAnd[ zterm (modfn (hist_head inhist_t) (hist_head outhist_t) (encode_vint v f));
+				    zterm (tail_equal inhist_t outhist_t)])]
 		| Par (pol1, pol2) -> 
 		  let pol1_sym = apply_pol pol1 in 
 		  let pol2_sym = apply_pol pol2 in 
  		  [ZToplevelComment("this is a par");
-		   ZDeclareRule (sym, default_params, zterm (pol1_sym inhist_t outhist_t));
-		   ZDeclareRule (sym, default_params, zterm (pol2_sym inhist_t outhist_t))]
+		   make_rule (zterm (pol1_sym inhist_t outhist_t));
+		   make_rule (zterm (pol2_sym inhist_t outhist_t))]
 		| Seq (pol1, pol2) -> 
 		  let pol1_sym = apply_pol pol1 in 
 		  let pol2_sym = apply_pol pol2 in 
  		  [ZToplevelComment("this is a seq");
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (pol1_sym inhist_t midhist_t); 
-							    zterm (pol2_sym midhist_t outhist_t)])]
+		   make_rule (ZAnd[ zterm (pol1_sym inhist_t midhist_t); 
+				    zterm (pol2_sym midhist_t outhist_t)])]
 		| Star pol1  -> 
 		  let pol1_sym = apply_pol pol1 in 
 		  let this_sym inh outh = TApp (TVar sym, [inh; outh]) in
 		  [ZToplevelComment("this is a star");
-		   ZDeclareRule (sym, default_params, ZEquals(inhist_t, outhist_t));
-		   ZDeclareRule (sym, default_params, ZAnd[ zterm (pol1_sym inhist_t midhist_t);
-													zterm (this_sym midhist_t outhist_t)])]
+		   make_rule (ZEquals(inhist_t, outhist_t));
+		   make_rule (ZAnd[ zterm (pol1_sym inhist_t midhist_t);
+				    zterm (this_sym midhist_t outhist_t)])]
 		| Choice _ -> failwith "I'm not rightly sure what a \"choice\" is "
 		| Link (sw1, pt1, sw2, pt2) ->
 		  let modsw = mod_fun Switch in
 		  let modpt = mod_fun (Header SDN_Types.InPort) in
-		  let the_packet_a_t = TVar the_packet_a in
-		  let the_packet_b_t = TVar the_packet_b in
+		  let packet_a_t = TVar packet_a in
+		  let packet_b_t = TVar packet_b in
 		  [ZToplevelComment("this is a link");
-		   ZDeclareRule (sym, default_params, 
-				 ZAnd[forwards_pred (Test (Switch, sw1)) (hist_head inhist_t);
-				      forwards_pred (Test ((Header SDN_Types.InPort), pt1)) (hist_head inhist_t);
-					  zterm (modsw (hist_head inhist_t) the_packet_a_t (encode_vint sw2 Switch));
-					  zterm (modpt the_packet_a_t the_packet_b_t (encode_vint pt2 (Header SDN_Types.InPort)));
-					  ZEquals(hist_cons the_packet_b_t inhist_t, outhist_t)])]
+		   make_rule 
+		     (ZAnd[forwards_pred (Test (Switch, sw1)) (hist_head inhist_t);
+			   forwards_pred (Test ((Header SDN_Types.InPort), pt1)) (hist_head inhist_t);
+			   zterm (modsw (hist_head inhist_t) packet_a_t (encode_vint sw2 Switch));
+			   zterm (modpt packet_a_t packet_b_t (encode_vint pt2 (Header SDN_Types.InPort)));
+			   ZEquals(hist_cons packet_b_t inhist_t, outhist_t)])]
 	      ) in
 	  Hashtbl.add hashtbl pol (sym,rules); sym in
       let get_rules () = Hashtbl.fold (fun _ rules a -> snd(rules)@a ) hashtbl [] in
       define_relation, get_rules
-		
-(*	let unroll_star k pol = 
-	  let rec unroll_star k pol = 
-		match k with 
-		| 0 -> Filter(True)
-		| 1 -> Par(pol, Filter(True))
-		| _ -> let pol' = unroll_star (k - 1) pol in 
-		  Par(Seq(pol, pol'), pol') in
-	  match pol with 
-	  | Star p -> unroll_star k p
-	  | _ -> pol
-*)
+
   end
 
 end  
