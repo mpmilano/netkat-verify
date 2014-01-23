@@ -315,10 +315,3 @@ module Equivalence = functor (Sat : Sat_description) -> struct
 
 end
 
-let check_equivalence pol1 pol2 str = 
-  let ints = Sat_Utils.collect_constants (Seq (pol1, pol2)) in
-  let module Sat = Sat(struct let ints = ints end) in
-  let module Equivalence = Equivalence(Sat) in
-  let open Sat_Syntax in
-  let prog = ZProgram [ZDeclareAssert ZTrue] in
-  Sat.run_solve (Some true) Equivalence.pervasive prog Equivalence.equivalence_query str

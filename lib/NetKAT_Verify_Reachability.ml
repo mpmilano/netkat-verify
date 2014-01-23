@@ -12,23 +12,26 @@ module Verify = struct
       
       
     module Z3Pervasives = struct
-	  let packet_a = "packet_a"
-	  let packet_b = "packet_b"
+      let packet_a = "packet_a"
+      let packet_b = "packet_b"
       let inhist = "inhist"
       let midhist = "midhist"
       let outhist = "outhist"
+      let is_hist n x  = TApp (TVar (Printf.sprintf "is-hist-%u" n), [x])
+      let hist_packet n m x = TApp (TVar (Printf.sprintf "hist-%u-packet-%u" n m), [x])
       let hist_one x = TApp (TVar "hist-one", [x])
       let hist_cons hd tl = TApp (TVar "hist-cons", [hd; tl])
-	  let hist_head h = TApp (TVar "hist-head", [h])
-	  let tail_equal a b = TApp (TVar "tail-equal", [a;b])
+      let hist_head h = TApp (TVar "hist-head", [h])
+      let tail_equal a b = TApp (TVar "tail-equal", [a;b])
+      let hist_construct n l = TApp (TVar (Printf.sprintf "hist-%u" n), l)
       let qrule = "q"
       let declarations = [
-		ZDeclareVar(inhist,SHistory);
-		ZDeclareVar(midhist,SHistory);
-		ZDeclareVar(outhist,SHistory);
-		ZDeclareVar(packet_a,SPacket);
-		ZDeclareVar(packet_b,SPacket);
-		ZDeclareVar(qrule, SRelation([SHistory; SHistory]))]
+	ZDeclareVar(inhist,SHistory);
+	ZDeclareVar(midhist,SHistory);
+	ZDeclareVar(outhist,SHistory);
+	ZDeclareVar(packet_a,SPacket);
+	ZDeclareVar(packet_b,SPacket);
+	ZDeclareVar(qrule, SRelation([SHistory; SHistory]))]
       let reachability_query = (Printf.sprintf "(query (q %s %s) 
 :default-relation smt_relation2
 :engine PDR
@@ -53,78 +56,78 @@ module Verify = struct
     module Z3Pervasives = struct
       open Sat
 
-
-      let int_list = 
-	let hash = Hashtbl.create 0 in
-	let rec int_list curr tot = 
-	  try Hashtbl.find hash (curr,tot) 
-	  with Not_found -> 
-	    if curr > tot then
-	      []
-	    else
-	      curr::(int_list (curr+1) tot) in
-	int_list 1
-
-      let hist_cons new_size old_size pkt hist = 
-	let int_list = if new_size = old_size then 
-	    (List.map (fun x -> x + 1) (int_list (new_size - 1)))
-	  else 
-	    (int_list (new_size - 1)) in
-	Printf.sprintf "(hist-%d %s %s)"
-	  (new_size)	  
-	  (intercalate (fun x -> Printf.sprintf "(hist-%d-packet-%d %s)" old_size x hist) " " int_list)
-	  pkt
-
-      let declare_datatypes k  : string = 
-	"
-(declare-datatypes 
- () 
- ((Packet
-   (packet
-"^(List.fold_left
-     (fun a hdr -> Printf.sprintf "(%s %s)\n%s" 
-       (serialize_header hdr) 
-       (serialize_sort (header_to_zsort hdr))
-       a)
-     "" all_used_fields)
-   ^"))))
-
-(declare-datatypes
- ()
- ((Hist\n" ^ 
-  (intercalate 
-	  (fun x -> Printf.sprintf "(hist-%d %s)" x 
-	    (intercalate (fun y -> Printf.sprintf "(hist-%d-packet-%d Packet)" x y ) " " (int_list x)))
-	  "\n" (int_list k))
-  ^ ")))
-
-
-(define-fun hist-head ((x Hist)) Packet \n"^
-	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) (hist-%u-packet-1 x)\n %s)" n n acc)
-	  (Printf.sprintf "(hist-%d-packet-1 x)" k)
-	  (int_list (k-1))
-^")
-
-(define-fun hist-cons ((p Packet) (x Hist)) Hist \n"^
-	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) %s\n %s)" n (hist_cons (n + 1) n "p" "x") acc)
-	  (hist_cons k k "p" "x" )
-	  (int_list (k-1))
-^")
-
-(define-fun tail-equal ((x Hist) (y Hist)) Bool \n "^
-	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) (ite (is-hist-%u y) (and %s) false)\n %s )" n n
-	    (if n = 1 
-	     then "false"
-	     else (intercalate (fun y -> Printf.sprintf "(= (hist-%u-packet-%u x) (hist-%u-packet-%u y))" n y n y ) " " 
-	       (List.map (fun x -> x + 1) (int_list (n - 1)))))
-	    acc
-	  )
-	  "false"
-	  (int_list k)
-	   
-^")
-" ^ "\n" 
-
+      let declare_datatypes k : (zDeclare list) = 
+	let open Stateless.Z3Pervasives in
+	let x = "x" in 
+	let x_t = TVar x in
+	let y  = "y" in 
+	let y_t = TVar y in
+	let p = "p" in
+	let p_t = TVar p in
+	let int_list = 
+	  let hash = Hashtbl.create 0 in
+	  let rec int_list curr tot = 
+	    try Hashtbl.find hash (curr,tot) 
+	    with Not_found -> 
+	      if curr > tot then
+		[]
+	      else
+		curr::(int_list (curr+1) tot) in
+	  int_list 1 in
+	let declare_packet = 
+	  let constrs : constr_t list = 
+	    (List.map
+	       (fun hdr -> serialize_header hdr, header_to_zsort hdr)
+	       all_used_fields) in
+	  let variant : variant_t = ("packet",constrs) in
+	  let variants :  variant_t list  = [variant] in
+	  ZDeclareDatatype ("Packet", variants) in
+	let declare_hist = 
+	  let constrs x : constr_t list = 
+	    (List.map (fun y -> Printf.sprintf "hist-%d-packet-%d" x y, SPacket ) (int_list x)) in
+	  let variants : variant_t list = 
+	    (List.map (fun x -> Printf.sprintf "hist-%d" x, constrs x) (int_list k)) in
+	  ZDeclareDatatype
+	    ("Hist", variants) in
+	let hist_cons_hlpr new_size old_size pkt hist : zFormula = 
+	  let int_list = if new_size = old_size then 
+	      (List.map (fun x -> x + 1) (int_list (new_size - 1)))
+	    else 
+	      (int_list (new_size - 1)) in
+	  zterm (hist_construct new_size 
+		   ((List.map (fun x -> hist_packet old_size x hist) int_list ) @
+		       [pkt])) in
+	
+	let hist_head_def = ZDefineVar ("hist-head", SMacro ([x,SHistory], SPacket), 
+					List.fold_left (fun acc n -> 
+					  ZIf (zterm (is_hist n x_t),
+					       zterm (hist_packet n 1 x_t), acc))
+					  (zterm (hist_packet k 1 x_t))
+					  (int_list (k-1))) in
+	let hist_cons_def = ZDefineVar ("hist-cons", SMacro([p, SPacket; x, SHistory], SHistory),
+					List.fold_left (fun acc n -> 
+					  ZIf (zterm (is_hist n x_t),
+					       (hist_cons_hlpr (n + 1) n p_t x_t),
+					       acc))
+					  (hist_cons_hlpr k k p_t x_t )
+					  (int_list (k-1))) in
+	let tail_equal_def = 
+	  ZDefineVar ("tail-equal", SMacro ([x, SHistory; y, SHistory], SBool),
+		      List.fold_left (fun acc n -> 
+			let fields_equal = 
+			  (if n = 1 
+			   then [ZFalse]
+			   else (List.map (fun y -> ZEquals(hist_packet n y x_t, hist_packet n y y_t))
+				   (List.map (fun x -> x + 1) (int_list (n - 1))))) in
+			ZIf (zterm (is_hist n x_t),
+			     ZIf (zterm (is_hist n y_t),
+				  ZAnd fields_equal,
+				  ZFalse),
+			       acc))
+			ZFalse
+			(int_list k)) in
+	    
+	[declare_packet; declare_hist; hist_head_def; hist_cons_def; tail_equal_def]
 
     end
     

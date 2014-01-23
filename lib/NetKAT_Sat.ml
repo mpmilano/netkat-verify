@@ -62,10 +62,15 @@ module Sat_Syntax = struct
       | ZEquals of zTerm * zTerm
       | ZNotEquals of zTerm * zTerm
       | ZComment of string * zFormula
+      | ZIf of zFormula * zFormula * zFormula
       | ZLiteral of string (* plop the string right in *)
+
+    type constr_t = (zVar * zSort)
+    type variant_t = zVar * (constr_t list)
 	  
     type zDeclare = 
       | ZDeclareRule of zVar * (zVar list) * zFormula
+      | ZDeclareDatatype of zVar * (variant_t list)
       | ZDeclareVar of zVar * zSort
       | ZDefineVar of zVar * zSort * zFormula
       | ZDeclareAssert of zFormula
@@ -402,6 +407,8 @@ in
 	Printf.sprintf "%s" (serialize_formula f)
       | ZOr(f::fs) -> 
 	Printf.sprintf "(or %s %s)" (serialize_formula f) (serialize_formula (ZOr(fs)))
+      | ZIf(tst,thn,els) -> 
+	Printf.sprintf "(ite %s %s %s)" (serialize_formula tst) (serialize_formula thn) (serialize_formula els)
       | ZComment(c, f) -> 
 	Printf.sprintf "\n;%s\n%s\n; END %s\n" c (serialize_formula f) c
       | ZLiteral s -> s
@@ -428,18 +435,28 @@ in
 	    (serialize_formula body)
 	    sym
 	    (intercalate (fun x -> x) " " vars)
+	| ZDeclareDatatype (name, variants) -> 
+	  Printf.sprintf "(declare-datatypes\n()\n((%s %s)))" name
+	    (intercalate (fun variant ->  match variant with
+	      | variant_name, fields -> 
+		Printf.sprintf "(%s %s)" variant_name
+		  (intercalate (fun field -> match field with
+		    | field_name, field_sort -> Printf.sprintf "(%s %s)" field_name (serialize_sort field_sort)
+		   ) " " fields)
+	     ) "\n" variants)
+
 
 
     let serialize_program pervasives p query: string = 
       let ZProgram(ds) = p in 
-      let ds' = List.flatten [!fresh_cell;
+      let ds' = List.flatten [pervasives;
+			      !fresh_cell;
 			      !macro_list_top;
 			      [ZToplevelComment("end initial declarations, commence dependent declarations\n")];
 			      !macro_list_bottom;
 			      [ZToplevelComment("End Definitions, Commence SAT expressions\n")]; 
 			      ds] in 
-      Printf.sprintf "%s\n%s\n%s\n"
-	pervasives
+      Printf.sprintf "%s\n%s\n"
 	(intercalate serialize_declare "\n" ds') 
 	query
 

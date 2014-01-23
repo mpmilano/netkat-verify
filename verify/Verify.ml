@@ -92,12 +92,7 @@ let _ =
 
 let _ = match (!mode) with
   | Equiv -> 
-    let prog1, prog2 = match List.map parse_program_from_file (!parse_things) with
-      | [prog1;prog2] -> prog1,prog2
-      | _ -> failwith (Printf.sprintf "incorrect arguments supplied to equiv.\n%s" usage) in
-    if fst(check_equivalence prog1 prog2 (List.hd (!run_name)))
-    then Printf.printf "Sat: programs equivalent\n"
-    else Printf.printf "Unsat: programs differ\n"
+    failwith "equivalence feature retired, check back later"
   | Reach -> 
     let (inp,prog,outp) = parse_reach_args (!parse_things) in
     Printf.printf "Input: %s\nOutput: %s\n" (NetKAT_Pretty.string_of_pred inp) (NetKAT_Pretty.string_of_pred outp);

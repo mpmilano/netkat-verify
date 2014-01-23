@@ -73,7 +73,10 @@
 
 ;rule that puts it all together
 ;
-(rule (=> (and (and (Switch-equals (hist-head inhist) (_ bv1 3)) (InPort-equals (hist-head inhist) (_ bv1 3))) (and (and (Switch-equals (hist-head outhist) (_ bv5 3)) (InPort-equals (hist-head outhist) (_ bv5 3))) (_r0 inhist outhist))) (q inhist outhist)))
+(rule (=> 
+       (and 
+	(= (_ bv42 256) (tail-hist inhist))
+	(and (Switch-equals (hist-head inhist) (_ bv1 3)) (InPort-equals (hist-head inhist) (_ bv1 3))) (and (and (Switch-equals (hist-head outhist) (_ bv5 3)) (InPort-equals (hist-head outhist) (_ bv5 3))) (_r0 inhist outhist))) (q inhist outhist)))
 
 ;syntactically-generated rules
 ;
