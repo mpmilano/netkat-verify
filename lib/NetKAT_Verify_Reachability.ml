@@ -35,11 +35,12 @@ module Verify = struct
 :print-answer false)
 " inhist outhist)
     end
-	open Z3Pervasives
-      
+    open Z3Pervasives
+	  
     let zterm x = ZEquals(x, TVar "true")
       
   end
+    
   module Stateful = functor (Sat : Sat_description) -> struct
     open SDN_Types
     open NetKAT_Types
@@ -51,7 +52,30 @@ module Verify = struct
 
     module Z3Pervasives = struct
       open Sat
-      let declare_datatypes : string = 
+
+
+      let int_list = 
+	let hash = Hashtbl.create 0 in
+	let rec int_list curr tot = 
+	  try Hashtbl.find hash (curr,tot) 
+	  with Not_found -> 
+	    if curr > tot then
+	      []
+	    else
+	      curr::(int_list (curr+1) tot) in
+	int_list 1
+
+      let hist_cons new_size old_size pkt hist = 
+	let int_list = if new_size = old_size then 
+	    (List.map (fun x -> x + 1) (int_list (new_size - 1)))
+	  else 
+	    (int_list (new_size - 1)) in
+	Printf.sprintf "(hist-%d %s %s)"
+	  (new_size)	  
+	  (intercalate (fun x -> Printf.sprintf "(hist-%d-packet-%d %s)" old_size x hist) " " int_list)
+	  pkt
+
+      let declare_datatypes k  : string = 
 	"
 (declare-datatypes 
  () 
@@ -67,24 +91,38 @@ module Verify = struct
 
 (declare-datatypes
  ()
- ((Hist
-  (hist-one (one-packet Packet))
-  (hist-cons (head-hist Packet) (rest-hist Hist))
-)))
+ ((Hist\n" ^ 
+  (intercalate 
+	  (fun x -> Printf.sprintf "(hist-%d %s)" x 
+	    (intercalate (fun y -> Printf.sprintf "(hist-%d-packet-%d Packet)" x y ) " " (int_list x)))
+	  "\n" (int_list k))
+  ^ ")))
 
-(define-fun hist-head ((x Hist)) Packet 
-	(ite (is-hist-one x) (one-packet x)
-	   (head-hist x))
-)
 
-(define-fun tail-equal ((x Hist) (y Hist)) Bool
-	(ite (is-hist-one x)
-	   (is-hist-one y)
-	   (ite (is-hist-cons y)
-		  (= (rest-hist x) (rest-hist y))
-		  false)))
+(define-fun hist-head ((x Hist)) Packet \n"^
+	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) (hist-%u-packet-1 x)\n %s)" n n acc)
+	  (Printf.sprintf "(hist-%d-packet-1 x)" k)
+	  (int_list (k-1))
+^")
+
+(define-fun hist-cons ((p Packet) (x Hist)) Hist \n"^
+	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) %s\n %s)" n (hist_cons (n + 1) n "p" "x") acc)
+	  (hist_cons k k "p" "x" )
+	  (int_list (k-1))
+^")
+
+(define-fun tail-equal ((x Hist) (y Hist)) Bool \n "^
+	  List.fold_left (fun acc n -> Printf.sprintf "(ite (is-hist-%u x) (ite (is-hist-%u y) (and %s) false)\n %s )" n n
+	    (if n = 1 
+	     then "false"
+	     else (intercalate (fun y -> Printf.sprintf "(= (hist-%u-packet-%u x) (hist-%u-packet-%u y))" n y n y ) " " 
+	       (List.map (fun x -> x + 1) (int_list (n - 1)))))
+	    acc
+	  )
+	  "false"
+	  (int_list k)
 	   
-
+^")
 " ^ "\n" 
 
 
@@ -279,7 +317,7 @@ let check_reachability_ints ints str inp pol outp oko =
 			       ZToplevelComment("rule that puts it all together\n")::last_rule
 			       ::ZToplevelComment("syntactically-generated rules\n")::(Verify.get_rules())] ) in
   let query = reachability_query in
-  Sat.run_solve oko Verify.Z3Pervasives.declare_datatypes prog query  str
+  Sat.run_solve oko (Verify.Z3Pervasives.declare_datatypes 5) prog query  str
 
 let check_reachability str inp pol outp = 
   check_reachability_ints 
