@@ -75,6 +75,7 @@ module Sat_Syntax = struct
       | ZDefineVar of zVar * zSort * zFormula
       | ZDeclareAssert of zFormula
       | ZToplevelComment of string
+      | ZDeclareLiteral of string 
 	  
     type zProgram = 
       | ZProgram of zDeclare list
@@ -247,6 +248,24 @@ let rec remove_links (pol : 'a) : 'a =
 
   let define_z3_macro (name : string) (arglist : (zVar * zSort) list)  (rettype : zSort) (body : zFormula)  = 
     [ZDefineVar (name, SMacro (arglist, rettype), body)]
+
+  let run_solve oko serialize solve prog str : bool * float =
+    let file = Printf.sprintf "%s%sdebug-%s.rkt" (Filename.get_temp_dir_name ()) Filename.dir_sep str in
+    let oc = open_out (file) in 
+    Printf.fprintf oc "%s\n;This is the program corresponding to %s\n" (serialize prog) str;
+    close_out oc;
+    let run_result = (
+    match oko, (solve prog) with
+      | Some (ok : bool), ((sat : bool), tm) ->
+        if ok = sat then
+	  true,tm
+        else
+          (Printf.printf "[Verify.check %s: expected %b got %b]\n%!" str ok sat; 
+	   Printf.printf "Offending program is in %s\n" file;
+	   false,tm)
+      | None, (sat,tm) ->
+        (Printf.printf "[Verify.check %s: %b]\n%!" str sat; false,tm)) in
+    run_result 
       
 end
 
@@ -259,9 +278,12 @@ module type Sat_description =
 sig 
   val serialize_sort : Sat_Syntax.zSort -> string
   val serialize_term : Sat_Syntax.zTerm -> string
+  val serialize_program : Sat_Syntax.zProgram -> string
+  val assemble_program : (Sat_Syntax.zDeclare list) -> Sat_Syntax.zProgram -> Sat_Syntax.zDeclare -> Sat_Syntax.zProgram
   val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar
   val bitvec_literal : Sat_Syntax.zSort -> int -> string
   val bitvec_size : Sat_Syntax.zSort -> int
+  val solve : Sat_Syntax.zProgram -> bool * float
 end
 
 module Sat = 
@@ -282,10 +304,7 @@ module Sat =
 
 	  
     (* fresh variables *)
-    let fresh_cell = ref []
-    let macro_list_top = ref []
-    let macro_list_bottom = ref []
-    
+    let fresh_cell = ref []    
       
     let fresh s = 
       let l = !fresh_cell in  
@@ -443,40 +462,20 @@ in
 		    | field_name, field_sort -> Printf.sprintf "(%s %s)" field_name (serialize_sort field_sort)
 		   ) " " fields)
 	     ) "\n" variants)
+	| ZDeclareLiteral s -> s
 
 
-
-    let serialize_program pervasives p query: string = 
-      let ZProgram(ds) = p in 
-      let ds' = List.flatten [pervasives;
-			      !fresh_cell;
-			      !macro_list_top;
-			      [ZToplevelComment("end initial declarations, commence dependent declarations\n")];
-			      !macro_list_bottom;
-			      [ZToplevelComment("End Definitions, Commence SAT expressions\n")]; 
-			      ds] in 
-      Printf.sprintf "%s\n%s\n"
-	(intercalate serialize_declare "\n" ds') 
-	query
+  let assemble_program pervasives prog query = 
+    let ZProgram(dcls) = prog in 
+    ZProgram (List.flatten [pervasives; !fresh_cell; dcls; [query]])
 
 
-    let z3_macro, z3_macro_top = 
-      let z3_macro_picklocation put_at_top (name : string) (arglist : (zVar * zSort) list) 
-	  (rettype : zSort)(body : zFormula) : zTerm = 
-	let name = name in
-	let new_macro = (define_z3_macro name arglist rettype body) in
-	(if put_at_top then
-	    macro_list_top := new_macro @ (!macro_list_top)
-	 else
-	    macro_list_bottom := new_macro @ (!macro_list_bottom));
-	TVar name in      
-      let z3_macro = z3_macro_picklocation false in
-      let z3_macro_top = z3_macro_picklocation true in
-      z3_macro, z3_macro_top
+  let serialize_program prog: string = 
+    let ZProgram(ds) = prog in 
+    (intercalate serialize_declare "\n" ds)
 
-
-    let solve pervasives prog query: bool * float = 
-      let s = (serialize_program pervasives prog query) in
+    let solve prog: bool * float = 
+      let s = (serialize_program prog) in
       let z3_out,z3_in = open_process "z3 -in -smt2 -nw" in 
       let _ = output_string z3_in s in
       let _ = flush z3_in in 
@@ -490,23 +489,5 @@ in
 	 done
        with End_of_file -> ());
       Buffer.contents b = "sat\n", (Unix.gettimeofday () -. start_time)
-
-    let run_solve oko pervasives prog query str : bool * float =
-      let file = Printf.sprintf "%s%sdebug-%s.rkt" (Filename.get_temp_dir_name ()) Filename.dir_sep str in
-      let oc = open_out (file) in 
-      Printf.fprintf oc "%s\n;This is the program corresponding to %s\n" (serialize_program pervasives prog query) str;
-      close_out oc;
-      let run_result = (
-    match oko, solve pervasives prog query with
-      | Some (ok : bool), ((sat : bool), tm) ->
-        if ok = sat then
-	  true,tm
-        else
-            (Printf.printf "[Verify.check %s: expected %b got %b]\n%!" str ok sat; 
-	     Printf.printf "Offending program is in %s\n" file;
-	     false,tm)
-      | None, (sat,tm) ->
-        (Printf.printf "[Verify.check %s: %b]\n%!" str sat; false,tm)) in
-      run_result 
 
   end

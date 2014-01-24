@@ -11,7 +11,7 @@ module Verify = struct
     open Sat_Utils
       
       
-    module Z3Pervasives = struct
+    module Support_Code = struct
       let packet_a = "packet_a"
       let packet_b = "packet_b"
       let inhist = "inhist"
@@ -36,13 +36,13 @@ module Verify = struct
 	ZDeclareVar(packet_a,SPacket);
 	ZDeclareVar(packet_b,SPacket);
 	ZDeclareVar(qrule, SRelation([SHistory; SHistory]))]
-      let reachability_query = (Printf.sprintf "(query (q %s %s) 
+      let reachability_query = ZDeclareLiteral (Printf.sprintf "(query (q %s %s) 
 :default-relation smt_relation2
 :engine PDR
 :print-answer false)
 " inhist outhist)
     end
-    open Z3Pervasives
+    open Support_Code
 	  
     let zterm x = ZEquals(x, TVar "true")
       
@@ -57,11 +57,11 @@ module Verify = struct
 
     let all_used_fields = List.filter (fun x -> (Sat.bitvec_size (header_to_zsort x)) > 0) all_fields
 
-    module Z3Pervasives = struct
+    module Support_Code = struct
       open Sat
 
       let declare_datatypes k : (zDeclare list) = 
-	let open Stateless.Z3Pervasives in
+	let open Stateless.Support_Code in
 	let x = "x" in 
 	let x_t = TVar x in
 	let y  = "y" in 
@@ -159,7 +159,7 @@ module Verify = struct
     end
 
     let rec forwards_pred (prd : pred) (pkt : zTerm) : zFormula = 
-      let open Stateless.Z3Pervasives in
+      let open Stateless.Support_Code in
       let forwards_pred pr : zFormula = forwards_pred pr pkt in
       let rec in_a_neg pred : zFormula = 
 	match pred with
@@ -185,7 +185,7 @@ module Verify = struct
 
     let define_relation, get_rules = 
       let open Sat in
-      let open Stateless.Z3Pervasives in
+      let open Stateless.Support_Code in
       let hashtbl = Hashtbl.create 0 in
     (*convenience names *)
       let inhist_t = TVar inhist in
@@ -264,7 +264,7 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Sat(struct let ints = ints end) in
   let open Verify.Stateless in
-  let open Verify.Stateless.Z3Pervasives in
+  let open Verify.Stateless.Support_Code in
   let module Verify = Verify.Stateful(Sat) in
   let open Sat_Syntax in
   let x = inhist in
@@ -281,7 +281,10 @@ let check_reachability_ints ints str inp pol outp oko =
 			       ZToplevelComment("rule that puts it all together\n")::last_rule
 			       ::ZToplevelComment("syntactically-generated rules\n")::(Verify.get_rules())] ) in
   let query = reachability_query in
-  Sat.run_solve oko (Verify.Z3Pervasives.declare_datatypes 5) prog query  str
+  let assembled_program = Sat.assemble_program (Verify.Support_Code.declare_datatypes 5) prog query in
+  let serialize = Sat.serialize_program in
+  let solve = Sat.solve in
+  Sat_Utils.run_solve oko serialize solve assembled_program str
 
 let check_reachability str inp pol outp = 
   check_reachability_ints 
