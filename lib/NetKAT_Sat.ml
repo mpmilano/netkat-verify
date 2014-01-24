@@ -194,8 +194,8 @@ let rec remove_links (pol : 'a) : 'a =
 	| Switch -> (fun x -> TSwitch x)
 
 	
-    let encode_header (header: header) (pkt:zVar) : zTerm = 
-      TApp (TVar (serialize_header header), [TVar pkt])
+    let encode_header (header: header) (pkt:zTerm) : zTerm = 
+      TApp (TVar (serialize_header header), [pkt])
 
     let encode_vint (v: VInt.t) h : zTerm = 
       let v = (VInt.get_int64 v) in
@@ -244,10 +244,13 @@ let rec remove_links (pol : 'a) : 'a =
       (collect_constants pol);
     Hashtbl.iter (fun a b -> Hashtbl.add final_hash a (VInt_set.elements b)) set_hash;
     (fun x -> try (Hashtbl.find final_hash x) with Not_found -> [])
-	    
+
+  let define_z3_macro (name : string) (arglist : (zVar * zSort) list)  (rettype : zSort) (body : zFormula)  = 
+    [ZDefineVar (name, SMacro (arglist, rettype), body)]
+      
 end
 
-module type ParameterizedOnInts = 
+module type Sat_Backend_Descr = 
 sig 
   val ints : Sat_Syntax.zSort -> (VInt.t list)
 end
@@ -256,17 +259,13 @@ module type Sat_description =
 sig 
   val serialize_sort : Sat_Syntax.zSort -> string
   val serialize_term : Sat_Syntax.zTerm -> string
-  val z3_macro_top : string -> (Sat_Syntax.zVar * Sat_Syntax.zSort) list -> 
-    Sat_Syntax.zSort -> Sat_Syntax.zFormula -> Sat_Syntax.zTerm
-  val z3_macro : string -> (Sat_Syntax.zVar * Sat_Syntax.zSort) list -> 
-    Sat_Syntax.zSort -> Sat_Syntax.zFormula -> Sat_Syntax.zTerm
   val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar
   val bitvec_literal : Sat_Syntax.zSort -> int -> string
   val bitvec_size : Sat_Syntax.zSort -> int
 end
 
 module Sat = 
-  functor (Int_List : ParameterizedOnInts) -> struct
+  functor (Int_List : Sat_Backend_Descr) -> struct
       
     open Sat_Utils
     open Sat_Syntax
@@ -461,9 +460,6 @@ in
 	query
 
 
-    let define_z3_macro (name : string) (arglist : (zVar * zSort) list)  (rettype : zSort) (body : zFormula)  = 
-      [ZDefineVar (name, SMacro (arglist, rettype), body)]
-	
     let z3_macro, z3_macro_top = 
       let z3_macro_picklocation put_at_top (name : string) (arglist : (zVar * zSort) list) 
 	  (rettype : zSort)(body : zFormula) : zTerm = 

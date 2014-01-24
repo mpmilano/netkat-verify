@@ -24,6 +24,10 @@ module Verify = struct
       let hist_head h = TApp (TVar "hist-head", [h])
       let tail_equal a b = TApp (TVar "tail-equal", [a;b])
       let hist_construct n l = TApp (TVar (Printf.sprintf "hist-%u" n), l)
+      let pred_test hdr pkt v = ZEquals (encode_header hdr pkt, v)
+      let pred_test_not hdr pkt v = ZNotEquals (encode_header hdr pkt, v)
+      let encode_packet_equals h1 h2 f = TApp (TVar (Printf.sprintf "packet_equals_except_%s" (serialize_header f)), [h1;h2])
+      let mod_fun f inh outh v = TApp (TVar (Printf.sprintf "mod_%s" (serialize_header f)), [inh; outh; v])
       let qrule = "q"
       let declarations = [
 	ZDeclareVar(inhist,SHistory);
@@ -126,67 +130,43 @@ module Verify = struct
 			       acc))
 			ZFalse
 			(int_list k)) in
-	    
-	[declare_packet; declare_hist; hist_head_def; hist_cons_def; tail_equal_def]
 
+	let packet_equals_except_funs : zDeclare list = 
+	  List.map (fun except -> 
+	    ZDefineVar (Printf.sprintf "packet_equals_except_%s" (serialize_header except), 
+			SMacro(["x", SPacket; "y", SPacket],SBool), 
+			ZAnd (List.fold_left 
+				(fun acc hd -> 
+				  if  hd = except then 
+				  acc 
+				else
+				    ZEquals ( (encode_header hd (TVar "x")), ( encode_header hd (TVar "y")))::acc)
+				[] all_used_fields))) all_used_fields in
+
+	let mod_funs = 
+	  List.map 
+	    (fun f -> 
+	      let packet_equals_fun = encode_packet_equals (TVar "x") (TVar "y") f in
+	      ZDefineVar ("mod_" ^ (serialize_header f), SMacro([("x", SPacket); ("y", SPacket); 
+								 ("v", (header_to_zsort f) )], SBool),
+			  (
+			    ZAnd [zterm packet_equals_fun;
+				  ZEquals( (encode_header f (TVar "y")),  (TVar "v"))])))
+	    all_used_fields in
+
+	[declare_packet; declare_hist; hist_head_def; hist_cons_def; tail_equal_def]@packet_equals_except_funs@mod_funs
+	  
     end
-    
-    let encode_packet_equals = 
-      let open Sat in
-      let hash = Hashtbl.create 0 in 
-      let encode_packet_equals = 
-	(fun (pkt1: zTerm) (pkt2: zTerm) (except :header)  -> 
-	  (TApp (
-	    (if Hashtbl.mem hash except
-	     then
-		Hashtbl.find hash except
-	     else
-		let l = 
-		  List.fold_left 
-		    (fun acc hd -> 
-		      if  hd = except then 
-			acc 
-		      else
-			ZEquals ( (encode_header hd "x"), ( encode_header hd "y"))::acc)
-		    [] all_used_fields in 
-		let new_except = (z3_macro_top ("packet_equals_except_" ^ (serialize_header except) )
-				    [("x", SPacket);("y", SPacket)] SBool  
-				    (ZAnd(l))) in
-		Hashtbl.add hash except new_except;
-		new_except), 
-	    [pkt1; pkt2]))) in
-      encode_packet_equals 
-
-    let pred_test,pred_test_not = 
-      let open Sat in
-      let true_hashmap = Hashtbl.create 0 in
-      let false_hashmap = Hashtbl.create 0 in
-      let pred_test want_true f =  
-	let hashmap = (if want_true then true_hashmap else false_hashmap) in
-	let name_suffix = (if want_true then "-equals" else "-not-equals") in
-	try (Hashtbl.find hashmap f)
-	with Not_found -> 
-	  let macro = 
-	    z3_macro ((serialize_header f) ^ name_suffix)
-	      [("x", SPacket); ("v",  (header_to_zsort f))] SBool 
-	      (if want_true 
-	       then
-		  (ZEquals ( (encode_header f "x"),  (TVar "v")))
-	       else
-		  (ZNotEquals ((encode_header f "x"), (TVar "v"))))
-	  in
-	  Hashtbl.add hashmap f macro;
-	  (Hashtbl.find hashmap f) in
-      pred_test true, pred_test false 
 
     let rec forwards_pred (prd : pred) (pkt : zTerm) : zFormula = 
+      let open Stateless.Z3Pervasives in
       let forwards_pred pr : zFormula = forwards_pred pr pkt in
       let rec in_a_neg pred : zFormula = 
 	match pred with
 	  | Neg p -> forwards_pred p
 	  | False -> ZTrue
 	  | True -> ZFalse
-	  | Test (hdr, v) -> zterm (TApp (pred_test_not hdr, [ pkt; encode_vint v hdr])) 
+	  | Test (hdr, v) -> pred_test_not hdr pkt (encode_vint v hdr) 
 	  | And (pred1, pred2) -> ZOr [in_a_neg pred1; in_a_neg pred1]
 	  | Or (pred1, pred2) -> ZAnd [in_a_neg pred1; in_a_neg pred2] in
       match prd with
@@ -194,31 +174,14 @@ module Verify = struct
 	  ZFalse
 	| True -> 
 	  ZTrue
-	| Test (hdr, v) -> zterm (TApp (pred_test hdr, [ pkt; encode_vint v hdr]))
+	| Test (hdr, v) -> pred_test hdr pkt (encode_vint v hdr)
 	| Neg p -> in_a_neg p
 	| And (pred1, pred2) -> 
 	  (ZAnd [forwards_pred pred1; 
 		 forwards_pred pred2])
 	| Or (pred1, pred2) -> 
 	  (ZOr [forwards_pred pred1;
-		forwards_pred pred2])
-	    
-	    
-    let mod_fun = 
-      let open Sat in
-      let hashmap = Hashtbl.create 0 in
-      let mod_fun f =  
-	try (Hashtbl.find hashmap f)
-	with Not_found ->
- 	  let packet_equals_fun = encode_packet_equals (TVar "x") (TVar "y") f in
-	  let macro = z3_macro ("mod_" ^ (serialize_header f)) [("x", SPacket); ("y", SPacket); 
-								("v", (header_to_zsort f) )] SBool 
-	    (
-	      ZAnd [zterm packet_equals_fun;
-		    ZEquals( (encode_header f "y"),  (TVar "v"))]) in
-	  Hashtbl.add hashmap f macro; 
-	  (Hashtbl.find hashmap f) in
-      mod_fun
+		forwards_pred pred2])	    
 
     let define_relation, get_rules = 
       let open Sat in
@@ -229,8 +192,6 @@ module Verify = struct
       let outhist_t = TVar outhist in
       let midhist_t = TVar midhist in
       let default_params = [inhist; outhist] in
-      let mod_fun f inh outh v = let mf = mod_fun f in  
-		       TApp(mf, [inh; outh; v]) in
 
       let rec define_relation pol = 
 	try 
