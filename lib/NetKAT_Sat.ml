@@ -70,6 +70,7 @@ module Sat_Syntax = struct
 	  
     type zDeclare = 
       | ZDeclareRule of zVar * (zVar list) * zFormula
+      | ZDeclareQuery of zVar * (zTerm list)
       | ZDeclareDatatype of zVar * (variant_t list)
       | ZDeclareVar of zVar * zSort
       | ZDefineVar of zVar * zSort * zFormula
@@ -462,6 +463,13 @@ in
 		    | field_name, field_sort -> Printf.sprintf "(%s %s)" field_name (serialize_sort field_sort)
 		   ) " " fields)
 	     ) "\n" variants)
+	| ZDeclareQuery (q,args) -> 
+	  (Printf.sprintf "(query (%s %s) 
+:default-relation smt_relation2
+:engine PDR
+:print-answer false)
+" q (intercalate serialize_term " " args))
+
 	| ZDeclareLiteral s -> s
 
 

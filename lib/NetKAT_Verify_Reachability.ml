@@ -36,11 +36,7 @@ module Verify = struct
 	ZDeclareVar(packet_a,SPacket);
 	ZDeclareVar(packet_b,SPacket);
 	ZDeclareVar(qrule, SRelation([SHistory; SHistory]))]
-      let reachability_query = ZDeclareLiteral (Printf.sprintf "(query (q %s %s) 
-:default-relation smt_relation2
-:engine PDR
-:print-answer false)
-" inhist outhist)
+      let reachability_query = ZDeclareQuery("q",[TVar inhist; TVar outhist])
     end
     open Support_Code
 	  
