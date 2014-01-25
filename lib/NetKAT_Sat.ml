@@ -287,7 +287,7 @@ sig
   val solve : Sat_Syntax.zProgram -> bool * float
 end
 
-module Sat = 
+module Z3Sat = 
   functor (Int_List : Sat_Backend_Descr) -> struct
       
     open Sat_Utils
