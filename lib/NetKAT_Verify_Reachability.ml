@@ -296,7 +296,7 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 
 
 let check_reachability_ints ints str inp pol outp oko =
-  let module Sat = Sat(struct let ints = ints end) in
+  let module Sat = Z3Sat(struct let ints = ints end) in
   let open Verify.Stateless in
   let open Verify.Stateless.Support_Code in
   let module Verify = Verify.Stateful(Sat) in
