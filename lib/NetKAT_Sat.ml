@@ -281,7 +281,7 @@ sig
   val serialize_term : Sat_Syntax.zTerm -> string
   val serialize_program : Sat_Syntax.zProgram -> string
   val assemble_program : (Sat_Syntax.zDeclare list) -> Sat_Syntax.zProgram -> Sat_Syntax.zDeclare -> Sat_Syntax.zProgram
-  val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar
+  val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar * Sat_Syntax.zDeclare
   val bitvec_literal : Sat_Syntax.zSort -> int -> string
   val bitvec_size : Sat_Syntax.zSort -> int
   val solve : Sat_Syntax.zProgram -> bool * float
@@ -303,29 +303,31 @@ module Z3Sat =
 	all_fields_zsort;
       Hashtbl.find hash
 
-	  
-    (* fresh variables *)
-    let fresh_cell = ref []    
+	let fresh = 
+      (* fresh variables *)
+      let fresh_cell = ref [] in
       
-    let fresh s = 
-      let l = !fresh_cell in  
-      let n = List.length l in 
-      let x = match s with
-	| SMacro _ -> failwith "macros need not use fresh"
-	| SLiteral _ -> failwith "literals should not use fresh"
-	| SPacket -> 
-          Printf.sprintf "_pkt%d" n
-	| SHistory ->
-	  Printf.sprintf "_hist%d" n
-	| SFunction _ -> 
-          Printf.sprintf "_f%d" n 
-	| SRelation _ -> 
-	  Printf.sprintf "_r%d" n
-	| _ -> 
-          Printf.sprintf "_n%d" n
-in 
-      fresh_cell := ZDeclareVar(x,s)::l;
-      x
+      let fresh s : Sat_Syntax.zVar * Sat_Syntax.zDeclare = 
+		let l = !fresh_cell in  
+		let n = List.length l in 
+		let x = match s with
+		  | SMacro _ -> failwith "macros need not use fresh"
+		  | SLiteral _ -> failwith "literals should not use fresh"
+		  | SPacket -> 
+			Printf.sprintf "_pkt%d" n
+		  | SHistory ->
+			Printf.sprintf "_hist%d" n
+		  | SFunction _ -> 
+			Printf.sprintf "_f%d" n 
+		  | SRelation _ -> 
+			Printf.sprintf "_r%d" n
+		  | _ -> 
+			Printf.sprintf "_n%d" n
+		in 
+		let decl = ZDeclareVar(x,s) in
+		fresh_cell := decl::l;
+		x,decl in
+	  fresh
 	
     let rec serialize_sort srt = match srt with
       | SInt -> 
@@ -475,7 +477,7 @@ in
 
   let assemble_program pervasives prog query = 
     let ZProgram(dcls) = prog in 
-    ZProgram (List.flatten [pervasives; !fresh_cell; dcls; [query]])
+    ZProgram (List.flatten [pervasives; dcls; [query]])
 
 
   let serialize_program prog: string = 
