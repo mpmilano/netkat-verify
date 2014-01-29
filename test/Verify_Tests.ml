@@ -26,7 +26,7 @@ TEST "simple-check-sat" =
 	  (make_packet_1 1)
 	  (make_simple_topology (make_transition (1,1) (2,2)))
 	  (make_packet_1 2)
-	(Some true)
+	true
 
 TEST "we care about p in (p;t)*" = 
 	(verify "we care about p in (p;t)*"
@@ -40,13 +40,22 @@ TEST "policy-false-sat" =
 	(make_packet_2 1 1)
 	(starify False (make_transition (1, 1) (2,1)))
 	(make_packet_2 2 1)
-	(Some false)
+	  false
 	  
 
 TEST "we love switch 2" = 
 	verify "we love switch 2"
 	  (make_packet_2 1 1)
 	  (starify (Test (Switch, make_vint 2)) (make_nolink_transition (1, 1) (2,1)))
+	  (make_packet_2 2 1)
+	  false 
+
+	  
+
+TEST "we love switch 2-sat" = 
+	check_reachability_z3
+	  (make_packet_2 1 1)
+	  (starify (Test (Switch, make_vint 2)) (make_transition (1, 1) (2,1)))
 	  (make_packet_2 2 1)
 	  false 
 
@@ -62,10 +71,30 @@ TEST "neg has no effect" =
 		 fnsh
 		 false )
 
+TEST "neg has no effect-sat" = 
+	let strt = (make_packet_1 1) in
+	let fnsh = (make_packet_1 2) in
+	let topo = make_transition (1,1) (2,1) in
+	(check_reachability_z3
+		 strt
+		 (starify 
+			(Neg (Test (Switch, make_vint 1)))
+			topo)
+		 fnsh
+		 false )
+
+
 TEST "simple-check-false" = 
   verify "are tests even running" 
 	(make_packet_2 1 1)
 	(make_simple_topology (make_nolink_transition (1, 1) (2, 1)))
+	(make_packet_2 2 2)
+	false 
+
+TEST "simple-check-false-sat" = 
+check_reachability_z3
+	(make_packet_2 1 1)
+	(make_simple_topology (make_transition (1, 1) (2, 1)))
 	(make_packet_2 2 2)
 	false 
 
@@ -77,6 +106,19 @@ TEST "narrowing down1" =
        (combine_topologies 
 	  [(make_nolink_transition (1, 1) (2, 1)); 
 	   (make_nolink_transition (2, 1) (3, 1))]
+       ))
+    (make_packet_2 3 1)
+    false
+
+
+TEST "narrowing down1-sat" = 
+		check_reachability_z3
+    (make_packet_2 1 1)
+    (starify 
+       (Neg (Test (Switch, make_vint 1))) 
+       (combine_topologies 
+	  [(make_transition (1, 1) (2, 1)); 
+	   (make_transition (2, 1) (3, 1))]
        ))
     (make_packet_2 3 1)
     false
@@ -94,6 +136,20 @@ TEST "narrowing down2" =
     (make_packet_2 3 3)
     false
 
+
+
+TEST "narrowing down2" = 
+		check_reachability_z3
+    (make_packet_2 1 1)
+    (starify 
+       (Test (Switch, make_vint 1)) 
+       (combine_topologies 
+	  [(make_transition (1, 1) (2, 2)); 
+	   (make_transition (2, 2) (3, 3))]
+       ))
+    (make_packet_2 3 3)
+    false
+
 TEST "narrowing down3" = 
   verify "narrowing down2"
     (make_packet_2 1 1)
@@ -106,13 +162,30 @@ TEST "narrowing down3" =
     (make_packet_2 3 3)
     false
 
+
+TEST "narrowing down3-sat" = 
+		check_reachability_z3
+    (make_packet_2 1 1)
+    (starify 
+       (Test (Switch, make_vint 1)) 
+       (combine_topologies 
+	  [(make_transition (1, 1) (2, 2)); 
+	   (make_transition (2, 2) (3, 3))]
+       ))
+    (make_packet_2 3 3)
+    false
+
 let ethsrc_is_1 = Test (Header SDN_Types.EthSrc, make_vint 1)
 let switch_is_2 = Test (Switch, make_vint 2)
 let pol = Or (And (ethsrc_is_1, Neg (switch_is_2)), Neg (ethsrc_is_1) ) 
 let tran1 = make_nolink_transition (1, 1) (2, 1)
 let tran2 = make_nolink_transition (2, 1) (3, 1)
 let topo = combine_topologies [tran1; tran2]
+let tran1_z3 = make_transition (1, 1) (2, 1)
+let tran2_z3 = make_transition (2, 1) (3, 1)
+let topo_z3 = combine_topologies [tran1_z3; tran2_z3]
 let pol_topo = starify pol topo
+let pol_topo_z3 = starify pol topo_z3
 
   TEST "collect-constants-1" = 
   let open NetKAT_Sat in
@@ -137,10 +210,26 @@ let pol_topo = starify pol topo
 	 (make_packet_2 2 1)
 	 true )
 
+
+  TEST "restrict0-sat" = 
+	  (check_reachability_z3
+	 (make_packet_2 1 1)
+	 (make_simple_topology topo_z3)
+	 (make_packet_2 2 1)
+	 true )
+
   TEST "restrict1" = 
   (verify "restrict1"
 	 (make_packet_4 1 1 1 3)
 	 (make_simple_topology topo)
+	 (make_packet_2 3 1)
+	 true )
+
+
+  TEST "restrict1-z3" = 
+	  (check_reachability_z3
+	 (make_packet_4 1 1 1 3)
+	 (make_simple_topology topo_z3)
 	 (make_packet_2 3 1)
 	 true )
   
@@ -152,10 +241,25 @@ let pol_topo = starify pol topo
 	 (make_packet_2 3 1)
 	 false )
 
+	TEST "restrict2-z3" = 
+	  (check_reachability_z3
+	 (make_packet_4 2 1 1 3)
+	 pol_topo_z3
+	 (make_packet_2 3 1)
+	 false )
+
 	TEST "restrict3" = 
   (verify "restrict3"
 	 (make_packet [])
 	 pol_topo
+	 (make_packet_2 3 1)
+	 true )
+
+
+	TEST "restrict3-z3" = 
+	  (check_reachability_z3
+	 (make_packet [])
+	 pol_topo_z3
 	 (make_packet_2 3 1)
 	 true )
 
@@ -167,6 +271,14 @@ let pol_topo = starify pol topo
 	 (make_packet_2 3 1)
 	 true )
 
+
+	TEST "restrict4-z3" = 
+	  (check_reachability_z3
+	 (make_packet_1 2)
+	 (make_simple_topology topo_z3)
+	 (make_packet_2 3 1)
+	 true )
+
 	TEST "restrict5" = 
   (verify "restrict5"
 	 (make_packet_4 1 1 1 2)
@@ -174,10 +286,18 @@ let pol_topo = starify pol topo
 	 (make_packet_2 2 1)
 	 true )
 
-	TEST "restrict6" = 
-  (verify "restrict6"
+
+	TEST "restrict5-z3" = 
+	  (check_reachability_z3
+	 (make_packet_4 1 1 1 2)
+	 pol_topo_z3
+	 (make_packet_2 2 1)
+	 true )
+
+	TEST "restrict6-z3" = 
+	  (check_reachability_z3
 	 (make_packet_2 1 1)
-	 pol_topo
+	 pol_topo_z3
 	 (make_packet_2 3 1)
 	 true )
 
@@ -188,10 +308,25 @@ let pol_topo = starify pol topo
      (make_packet_2 4 1)
      false)
 
+    TEST "restrict7-z3" = 
+	  (check_reachability_z3
+     (make_packet_2 1 1)
+     pol_topo_z3
+     (make_packet_2 4 1)
+     false)
+
     TEST "real-restrict" = 
   (verify "real-restrict"
      (make_packet_3 1 1 1)
      pol_topo
+     (make_packet_2 3 1)
+     false )
+
+
+    TEST "real-restrict-z3" = 
+	  (check_reachability_z3
+     (make_packet_3 1 1 1)
+     pol_topo_z3
      (make_packet_2 3 1)
      false )
 
@@ -202,6 +337,13 @@ let pol_topo = starify pol topo
      (make_packet_2 3 1)
      true )
 
+    TEST "real-restrict2-z3" = 
+	  (check_reachability_z3
+     (make_packet_3 1 1 2)
+     pol_topo_z3
+     (make_packet_2 3 1)
+     true )
+
     TEST "why isn't this over-constraining?" = 
   (verify "why isn't this over-constraining?"
      (make_packet_2 1 1)
@@ -209,6 +351,18 @@ let pol_topo = starify pol topo
 	(combine_topologies 
 	   [(make_nolink_transition (1, 1) (2, 2));
 	    (make_nolink_transition (1, 1) (3, 3))]))
+     (make_packet_2 2 2)
+     true
+  )
+
+
+    TEST "why isn't this over-constraining?-z3" = 
+	  (check_reachability_z3
+     (make_packet_2 1 1)
+     (make_simple_topology
+	(combine_topologies 
+	   [(make_transition (1, 1) (2, 2));
+	    (make_transition (1, 1) (3, 3))]))
      (make_packet_2 2 2)
      true
   )
