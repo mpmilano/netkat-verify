@@ -248,7 +248,8 @@ module Verify = struct
 						  Seq (Mod(Switch,sw2),
 							   Mod (Header InPort, pt2)))))
 				pkt_out
-			| _ -> failwith "network not in (p;t)* form"
+			| _ -> failwith (Printf.sprintf "network not in (p;t)* form
+(you gave forwards_topo this: %s)" (NetKAT_Pretty.string_of_policy pol))
 			  
 	(* maybe return all histories for which this was valid?
 	   that would be a set of lists, which sounds alltogether
@@ -309,13 +310,15 @@ module Verify = struct
 		  let results = parallel_map 
 			(fun x ->
 			  let formu,decl,hist = x in
-			  let res,exec_time = 
-				Sat.solve (Sat.assemble_program 
+			  let prog = (Sat.assemble_program 
 							 ((Support_Code.declare_datatypes k) @ indecl::outdecl::decl)
 							 (ZProgram [ZDeclareAssert(formu);
 										ZDeclareAssert(forwards_pred inpkt_constr (TVar inpt));
 										ZDeclareAssert(forwards_pred outp_constr (TVar outp))])
 							 (ZDeclareLiteral "(check-sat)")) in
+			  let _ = Sat_Utils.printdebug_prog Sat.serialize_program prog (Printf.sprintf "parallel-sat-with-%u-pkts" (List.length hist)) in
+			  let res,exec_time = 
+				Sat.solve prog in
 			  res,hist
 			)
 			(fun f -> List.iter f history_sets) in
@@ -448,7 +451,7 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let collect_constants inp pol outp = 
   (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp)))
 	
-let check_reachability_z3_ints ints str inp pol outp oko = 
+let check_reachability_z3_ints ints inp pol outp oko = 
   let module Sat = Z3Sat(struct let ints = ints end) in
   let open Verify.Stateless in
   let open Verify.Stateless.Support_Code in
@@ -460,10 +463,10 @@ let check_reachability_z3_ints ints str inp pol outp oko =
 	| false,Some(false) -> true
 	| _ -> false
 
-let check_reachability_z3  str inp pol outp = 
+let check_reachability_z3 inp pol outp = 
   check_reachability_z3_ints 
 	(collect_constants inp pol outp)
-	str inp pol outp
+	inp pol outp
 
 let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Z3Sat(struct let ints = ints end) in

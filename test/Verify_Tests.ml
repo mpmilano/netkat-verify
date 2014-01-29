@@ -15,20 +15,33 @@ TEST "smallest-possible-star" =
       false
 
 TEST "simple-check" = 
-  verify "are tests even running" 
+	verify "are tests even running" 
 	(make_packet_2 1 1)
 	(make_simple_topology (make_nolink_transition (1, 1) (2, 2)))
-	(make_packet_2 2 2)
-	true 
+	  (make_packet_2 2 2)
+	  true
 
-
+TEST "simple-check-sat" = 
+  check_reachability_z3 
+	  (make_packet_1 1)
+	  (make_simple_topology (make_transition (1,1) (2,2)))
+	  (make_packet_1 2)
+	(Some true)
 
 TEST "we care about p in (p;t)*" = 
-	verify "we care about p in (p;t)*"
+	(verify "we care about p in (p;t)*"
+	   (make_packet_2 1 1)
+	   (starify False (make_nolink_transition (1, 1) (2,1)))
+	   (make_packet_2 2 1)
+	   false )
+
+TEST "policy-false-sat" = 
+	check_reachability_z3 
 	(make_packet_2 1 1)
-	(starify False (make_nolink_transition (1, 1) (2,1)))
+	(starify False (make_transition (1, 1) (2,1)))
 	(make_packet_2 2 1)
-	false 
+	(Some false)
+	  
 
 TEST "we love switch 2" = 
 	verify "we love switch 2"
