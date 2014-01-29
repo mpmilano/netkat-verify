@@ -248,6 +248,10 @@ module Verify = struct
 						  Seq (Mod(Switch,sw2),
 							   Mod (Header InPort, pt2)))))
 				pkt_out
+			| Par(l1,l2) -> 
+			  let form1,decl1 = forwards_topo pkt l1 pkt_out in
+			  let form2,decl2 = forwards_topo pkt l2 pkt_out in
+			  ZOr[form1;form2],List.flatten[decl1;decl2]
 			| _ -> failwith (Printf.sprintf "network not in (p;t)* form
 (you gave forwards_topo this: %s)" (NetKAT_Pretty.string_of_policy pol))
 			  
@@ -459,8 +463,8 @@ let check_reachability_z3_ints ints inp pol outp oko =
   let open Stateful.SAT_Version in
   let open Sat_Syntax in
   match run_sat_reachability 5 inp pol outp,oko with 
-	| true,Some(true) -> true
-	| false,Some(false) -> true
+	| true,true -> true
+	| false,false -> true
 	| _ -> false
 
 let check_reachability_z3 inp pol outp = 
