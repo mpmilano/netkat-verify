@@ -299,7 +299,7 @@ module Verify = struct
 		  iter (fun x -> res:= (f x)::(!res));
 		  !res
 
-		let rec run_sat_reachability k inpkt_constr pt outp_constr = 
+		let rec run_sat_reachability k inpkt_constr pt outp_constr hist_expr str = 
 		  let pol,topo = match pt with
 			| Star (Seq (p,t)) -> p,t
 			| _ -> failwith "error: network not in form (p;t)*" in
@@ -316,11 +316,13 @@ module Verify = struct
 			  let formu,decl,hist = x in
 			  let prog = (Sat.assemble_program 
 							 ((Support_Code.declare_datatypes k) @ indecl::outdecl::decl)
-							 (ZProgram [ZDeclareAssert(formu);
-										ZDeclareAssert(forwards_pred inpkt_constr (TVar inpt));
-										ZDeclareAssert(forwards_pred outp_constr (TVar outp))])
+							 (ZProgram [
+							   hist_expr hist;
+							   ZDeclareAssert(formu);
+							   ZDeclareAssert(forwards_pred inpkt_constr (TVar inpt));
+							   ZDeclareAssert(forwards_pred outp_constr (TVar outp))])
 							 (ZDeclareLiteral "(check-sat)")) in
-			  let _ = Sat_Utils.printdebug_prog Sat.serialize_program prog (Printf.sprintf "parallel-sat-with-%u-pkts" (List.length hist)) in
+			  let _ = Sat_Utils.printdebug_prog Sat.serialize_program prog (Printf.sprintf "%s-with-%u-pkts" str (List.length hist)) in
 			  let res,exec_time = 
 				Sat.solve prog in
 			  res,hist
@@ -455,22 +457,44 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let collect_constants inp pol outp = 
   (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp)))
 	
-let check_reachability_z3_ints ints inp pol outp oko = 
+let check_reachability_z3_ints str ints inp pol outp hist_fun oko = 
   let module Sat = Z3Sat(struct let ints = ints end) in
   let open Verify.Stateless in
   let open Verify.Stateless.Support_Code in
   let module Stateful = Verify.Stateful(Sat) in
   let open Stateful.SAT_Version in
   let open Sat_Syntax in
-  match run_sat_reachability 5 inp pol outp,oko with 
+  match run_sat_reachability 5 inp pol outp hist_fun str ,oko with 
 	| true,true -> true
 	| false,false -> true
 	| _ -> false
 
-let check_reachability_z3 inp pol outp = 
-  check_reachability_z3_ints 
+let check_reachability_z3 str inp pol outp = 
+  let hist_fun = 
+	(fun x -> Sat_Syntax.ZToplevelComment "unimplemented") in
+  check_reachability_z3_ints str
 	(collect_constants inp pol outp)
-	inp pol outp
+	inp pol outp hist_fun
+
+let check_waypoint str inp pol outp (wayp : VInt.t) ok = 
+  if (check_reachability_z3 (str ^ " normal reachability") inp pol outp true)
+  then
+	let open Sat_Syntax in
+		let open Verify.Stateless.Support_Code in
+			let hist_fun l = 
+			  ZDeclareAssert
+				(ZAnd 
+				   (List.map 
+					  (fun x -> 
+						pred_test_not Switch (TVar x) (Sat_Utils.encode_vint wayp Switch)
+					  ) l)) in
+			(check_reachability_z3_ints str
+			   (Sat_Utils.collect_constants (Seq (Filter (Test (Switch, wayp)), (Seq (Seq (Filter inp,pol),Filter outp)))))
+			   inp pol outp hist_fun (not ok))
+  else
+	failwith "please only run me on reachable paths."
+		
+  
 
 let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Z3Sat(struct let ints = ints end) in

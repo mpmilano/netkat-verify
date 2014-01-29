@@ -25,7 +25,7 @@ let verify (description: string) (initial_state: pred) (program: policy)
     desired_outcome; close_out oc; close_out oc2;
   fst(check description initial_state program final_state (Some desired_outcome))
 
-	  
+let verify_waypoint str inp pol outp waypt ok = check_waypoint str inp pol outp (make_vint waypt) ok	  
 
 (* let verify_history (description: string) (initial_state: pred) (program: policy) expr (final_state: pred) (desired_outcome: bool) : bool = 
 	check_with_history expr description initial_state program final_state (Some desired_outcome)
