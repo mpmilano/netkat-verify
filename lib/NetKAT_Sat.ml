@@ -250,11 +250,17 @@ let rec remove_links (pol : 'a) : 'a =
   let define_z3_macro (name : string) (arglist : (zVar * zSort) list)  (rettype : zSort) (body : zFormula)  = 
     [ZDefineVar (name, SMacro (arglist, rettype), body)]
 
-  let run_solve oko serialize solve prog str : bool * float =
+	  
+  let printdebug_prog serialize prog str = 
     let file = Printf.sprintf "%s%sdebug-%s.rkt" (Filename.get_temp_dir_name ()) Filename.dir_sep str in
     let oc = open_out (file) in 
     Printf.fprintf oc "%s\n;This is the program corresponding to %s\n" (serialize prog) str;
     close_out oc;
+	file
+	
+
+  let run_solve oko serialize solve prog str : bool * float =
+	let file = printdebug_prog serialize prog str in
     let run_result = (
     match oko, (solve prog) with
       | Some (ok : bool), ((sat : bool), tm) ->
@@ -262,7 +268,7 @@ let rec remove_links (pol : 'a) : 'a =
 	  true,tm
         else
           (Printf.printf "[Verify.check %s: expected %b got %b]\n%!" str ok sat; 
-	   Printf.printf "Offending program is in %s\n" file;
+	   Printf.printf "Offending program is in %s" file;
 	   false,tm)
       | None, (sat,tm) ->
         (Printf.printf "[Verify.check %s: %b]\n%!" str sat; false,tm)) in

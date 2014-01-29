@@ -287,33 +287,42 @@ module Verify = struct
 					 (forwards_star (k-1) inpt pol topo outp)
 					 (History_Set.singleton (h))
 
-					 
-		let parallel_map (f : 'a -> 'b) iter : ('b list) = 
-		  failwith "not implemented"
 
-		let rec run_sat_reachability k inpt pt outp = 
+		let parallel_map (f : 'a -> 'b) iter : ('b list) = 
+		  (* just a normal map for now *)
+		  let res = ref [] in
+		  iter (fun x -> res:= (f x)::(!res));
+		  !res
+
+		let rec run_sat_reachability k inpkt_constr pt outp_constr = 
 		  let pol,topo = match pt with
 			| Star (Seq (p,t)) -> p,t
 			| _ -> failwith "error: network not in form (p;t)*" in
+		  let inpt,indecl = Sat.fresh SPacket in
+		  let outp,outdecl = Sat.fresh SPacket in
 		  let history_sets = 
 			let rec build_hists k = 
 			  match k with 
 				| 0 -> [forwards_k 0 inpt pol topo outp]
 				| _ -> (forwards_k k inpt pol topo outp)::(build_hists (k-1))in
 			build_hists k in
-		  parallel_map 
+		  let results = parallel_map 
 			(fun x ->
 			  let formu,decl,hist = x in
 			  let res,exec_time = 
 				Sat.solve (Sat.assemble_program 
-							 ((Support_Code.declare_datatypes k) @ decl) 
-							 (ZProgram [ZDeclareAssert(formu)])
+							 ((Support_Code.declare_datatypes k) @ indecl::outdecl::decl)
+							 (ZProgram [ZDeclareAssert(formu);
+										ZDeclareAssert(forwards_pred inpkt_constr (TVar inpt));
+										ZDeclareAssert(forwards_pred outp_constr (TVar outp))])
 							 (ZDeclareLiteral "(check-sat)")) in
 			  res,hist
 			)
-			(fun f -> List.iter f history_sets)
+			(fun f -> List.iter f history_sets) in
+		  (*no histories for right now *)
+		  (List.filter (fun x -> let res,hist = x in res) results) != []
+
 			
-		  
 	  end
 
 	  module Datalog_Version = struct
@@ -439,6 +448,23 @@ oko: bool option. has to be Some. True if you think it should be satisfiable.
 let collect_constants inp pol outp = 
   (Sat_Utils.collect_constants (Seq (Seq (Filter inp,pol),Filter outp)))
 	
+let check_reachability_z3_ints ints str inp pol outp oko = 
+  let module Sat = Z3Sat(struct let ints = ints end) in
+  let open Verify.Stateless in
+  let open Verify.Stateless.Support_Code in
+  let module Stateful = Verify.Stateful(Sat) in
+  let open Stateful.SAT_Version in
+  let open Sat_Syntax in
+  match run_sat_reachability 5 inp pol outp,oko with 
+	| true,Some(true) -> true
+	| false,Some(false) -> true
+	| _ -> false
+
+let check_reachability_z3  str inp pol outp = 
+  check_reachability_z3_ints 
+	(collect_constants inp pol outp)
+	str inp pol outp
+
 let check_reachability_ints ints str inp pol outp oko =
   let module Sat = Z3Sat(struct let ints = ints end) in
   let open Verify.Stateless in
