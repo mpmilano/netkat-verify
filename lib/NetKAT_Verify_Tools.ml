@@ -35,6 +35,8 @@ let verify_specific_k (description: string) (initial_state: pred) (program: poli
 
 let make_transition (s1, p1) (s2, p2) =  (Link (make_vint s1, make_vint p1, make_vint s2, make_vint p2))
 
+let make_nolink_transition a b = remove_links (make_transition a b)
+
 let make_simple_topology topo : policy = Star (Seq (Filter True, topo))
 
 let rec combine_topologies (topo : policy list) : policy = 
