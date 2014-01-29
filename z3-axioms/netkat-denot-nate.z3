@@ -118,16 +118,18 @@
 (assert (forall ((h Packet) (p Policy) (q Policy))
            (implies (Min (pol-union p q) h) (and (Min p h) (Min q h)))))
 
-(assert (forall ((h Packet) (p Policy) (q Policy))
-                (exists ((h-prime Packet))
-           (implies (Min (pol-seq p q) h) (and (Min p h) (Eval p h h-prime) (Min q h-prime))))))
+;;;;;; Sequence
+(assert (forall ((h Packet) (h1 Packet) (p Policy) (q Policy))
+           (implies (Min (pol-seq p q) h) 
+                    (and (Min p h)
+                         (implies (Eval p h h1)  (Min q h1))))))
 
 (assert (forall ((h Packet) (p Policy))
         (implies (Min (pol-star p) h) (Min (pol-union pol-one (pol-seq p (pol-star p))) h))))
 
-(assert (Min (pol-seq (pol-modify Switch 1) (pol-modify Switch 1)) (mk-packet 0 0 nil)))
 
-(assert (Eval (pol-seq (pol-modify Switch 1) (pol-modify Switch 1)) (mk-packet 0 0 nil) (mk-packet 0 0 nil)))
+ (assert (Min (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil)))
+ (assert (Eval (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil) (mk-packet 2 0 nil)))
 
 (check-sat)
 (get-model)
