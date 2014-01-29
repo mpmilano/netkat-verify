@@ -33,7 +33,7 @@ let verify (description: string) (initial_state: pred) (program: policy)
 let verify_specific_k (description: string) (initial_state: pred) (program: policy) (final_state: pred) (desired_outcome: bool) k : bool = 
 	check description initial_state program final_state (Some desired_outcome) *)
 
-let make_transition (s1, p1) (s2, p2) = remove_links (Link (make_vint s1, make_vint p1, make_vint s2, make_vint p2))
+let make_transition (s1, p1) (s2, p2) =  (Link (make_vint s1, make_vint p1, make_vint s2, make_vint p2))
 
 let make_simple_topology topo : policy = Star (Seq (Filter True, topo))
 
