@@ -70,6 +70,8 @@
 	    (Seq (Filter(And (Test (Switch, switch1), Test (Header SDN_Types.InPort, port1))),
 		  Seq (Mod (Switch, switch2), Mod (Header S.InPort, port2))), t)
 	  -> parse_links (assemble switch1 port1 switch2 port2) t
+	| Link (s1, p1, s2, p2) -> (assemble s1 p1 s2 p2)
+	| Par ( Link (s1,p1,s2,p2), t) -> parse_links (assemble s1 p2 s2 p2) t
 	| _ -> failwith (Printf.sprintf "unimplemented composition pattern") in 
     match ptstar with
       | Star (Seq (p, t)) -> parse_links graph t
