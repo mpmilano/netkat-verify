@@ -5,23 +5,12 @@
 (declare-datatypes () 
   ((Field 
       Switch 
-      Port 
-      ;; EthType 
-      ;; EthSrc 
-      ;; EthDst 
-      ;; Vlan 
-      ;; VlanPcp 
-      ;; IPProto 
-      ;; IP4Src 
-      ;; IP4Dst 
-      ;; TCPSrcPort 
-      ;; TCPDstPort
-      )))
+      Port )))
 
 (declare-datatypes () 
   ((Packet (mk-packet (switch-value Value)
                       (port-value Value)
-                      (hist-value(List Value)))))) ;; Just a history of switches
+                      (hist-value(List Value)))))) 
 
 (declare-datatypes ()
   ((Policy (pol-filter (filter-field Field) (filter-value Value))
@@ -52,20 +41,17 @@
 ;; Union
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h2 Packet))
    (implies (Min (pol-union p q) h1)
-      (iff (or (Eval p h1 h2) (Eval q h1 h2)) (Eval (pol-union p q) h1 h2))
-      )))
+      (iff (or (Eval p h1 h2) (Eval q h1 h2)) (Eval (pol-union p q) h1 h2)))))
 
 ;; Sequence
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h2 Packet) (h3 Packet))
    (implies (Min (pol-seq p q) h1)
-            (iff (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3))
-        )))
+            (iff (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3)))))
 
 ;; Star
 (assert (forall ((p Policy) (h1 Packet) (h2 Packet))
    (implies (Min (pol-star p) h1)
-           (iff (Eval (pol-union pol-one (pol-seq p (pol-star p))) h1 h2) (Eval (pol-star p) h1 h2))
-        )))
+           (iff (Eval (pol-union pol-one (pol-seq p (pol-star p))) h1 h2) (Eval (pol-star p) h1 h2)))))
 
 ;; Dup
 (assert (forall ((h1 Packet))
@@ -75,13 +61,13 @@
                                   (insert (switch-value h1) (hist-value h1)))))))
 
 ;; Filter 
-(assert (forall ((h1 Packet))
-    (implies (Min (pol-filter Switch (switch-value h1)) h1)
-             (Eval (pol-filter Switch (switch-value h1)) h1 h1))))
+(assert (forall ((h1 Packet) (v Value))
+    (implies (Min (pol-filter Switch v) h1)
+             (iff (= (switch-value h1) v) (Eval (pol-filter Switch v) h1 h1)))))
 
-(assert (forall ((h1 Packet))
-    (implies (Min (pol-filter Port (port-value h1)) h1)
-             (Eval (pol-filter Port (port-value h1)) h1 h1))))
+(assert (forall ((h1 Packet) (v Value))
+    (implies (Min (pol-filter Port v) h1)
+             (iff (= (port-value h1) v) (Eval (pol-filter Port v) h1 h1)))))
 
 ;; Modify 
 (assert (forall ((h1 Packet) (v Value))
@@ -105,7 +91,7 @@
                          (Fun (pol-seq p q)))))
 (assert (Fun pol-dup))
 
-;; There are other special cases where we get a functoin, for example
+;; There are other special cases where we get a function, for example
 ;; if p equiv q and (Fun p) then (Fun (pol-union p q))
 
 (assert (forall ((p Policy) (h1 Packet) (h2 Packet) (h3 Packet))
@@ -118,18 +104,25 @@
 (assert (forall ((h Packet) (p Policy) (q Policy))
            (implies (Min (pol-union p q) h) (and (Min p h) (Min q h)))))
 
-;;;;;; Sequence
 (assert (forall ((h Packet) (h1 Packet) (p Policy) (q Policy))
            (implies (Min (pol-seq p q) h) 
-                    (and (Min p h)
-                         (implies (Eval p h h1)  (Min q h1))))))
+                    (and (Min (pol-seq p q) h)
+                         (implies (Eval p h h1) (Min q h1))))))
 
 (assert (forall ((h Packet) (p Policy))
         (implies (Min (pol-star p) h) (Min (pol-union pol-one (pol-seq p (pol-star p))) h))))
 
+;; Main
+(declare-var h1 Packet)
+(declare-var h2 Packet)
+(declare-var p0 Policy)
 
- (assert (Min (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil)))
- (assert (Eval (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil) (mk-packet 2 0 nil)))
+(assert (= p0 (pol-seq (pol-modify Switch 1) (pol-modify Switch 2))))
+(assert (= h1 (mk-packet 0 0 nil)))
+(assert (= h2 (mk-packet 2 0 nil)))
+
+(assert (Min p0 h1))
+;; (assert (Eval p0 h1 h2))
 
 (check-sat)
 (get-model)
