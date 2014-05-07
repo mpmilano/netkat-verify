@@ -1,4 +1,3 @@
-
 ;; Values
 (define-sort Value () Int)
 
@@ -42,7 +41,8 @@
 (declare-rel Min (Policy Packet))
 
 ;; One 
-(assert (forall ((h Packet)) (Eval pol-one h h)))
+(assert (forall ((h Packet))
+           (implies (Min pol-one h) (Eval pol-one h h))))
 
 ;; Zero 
 ;; NB: Only if you are interested in this packet you know that it can't evaluate!
@@ -50,6 +50,7 @@
     (implies (Min pol-zero h1)
              (not (Eval pol-zero h1 h2)))))
 
+;; Negation
 (assert (forall ((h1 Packet) (h2 Packet) (p Policy))
     (implies (Min (pol-neg p) h1)
              (iff (Eval p h1 h2) (not (Eval (pol-neg p) h1 h2))))))
@@ -57,16 +58,13 @@
 ;; Union
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h2 Packet))
    (implies (Min (pol-union p q) h1)
-      (iff (or (Eval p h1 h2) (Eval q h1 h2)) (Eval (pol-union p q) h1 h2))
-      )))
+      (iff (or (Eval p h1 h2) (Eval q h1 h2)) (Eval (pol-union p q) h1 h2)))))
 
-;; Sequence, one direction 
+;; Sequence 
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h2 Packet) (h3 Packet))
    (implies (Min (pol-seq p q) h1)
-            (implies (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3))
-        )))
+            (implies (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3)))))
 
-;; Reverse axiom for sequence, note the ugly nested existential
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h3 Packet))
    (implies (Min (pol-seq p q) h1)
             (implies (Eval (pol-seq p q) h1 h3)
@@ -75,8 +73,7 @@
 ;; Star
 (assert (forall ((p Policy) (h1 Packet) (h2 Packet))
    (implies (Min (pol-star p) h1)
-           (iff (Eval (pol-union pol-one (pol-seq p (pol-star p))) h1 h2) (Eval (pol-star p) h1 h2))
-        )))
+           (iff (or (= h1 h2) (Eval (pol-seq p (pol-star p)) h1 h2)) (Eval (pol-star p) h1 h2)))))
 
 ;; Dup -- causes loop!
 (assert (forall ((h1 Packet) (p Policy))
@@ -88,13 +85,22 @@
 
 
 ;; Filter 
-(assert (forall ((h1 Packet)) (implies (Min (pol-filter Switch (switch-value h1)) h1) (Eval (pol-filter Switch (switch-value h1)) h1 h1))))
-(assert (forall ((h1 Packet)) (implies (Min (pol-filter InPort (port-value h1))     h1) (Eval (pol-filter InPort   (port-value h1)) h1 h1))))
+(assert (forall ((h1 Packet) (h2 Packet) (v Value)) 
+   (implies (Min (pol-filter Switch v) h1) 
+            (iff (and (= h1 h2) (= (switch-value h1) v)) (Eval (pol-filter Switch v) h1 h2)))))
+
+(assert (forall ((h1 Packet) (h2 Packet) (v Value)) 
+   (implies (Min (pol-filter InPort v) h1) 
+            (iff (and (= h1 h2) (= (port-value h1) v)) (Eval (pol-filter InPort v) h1 h2)))))
 
 ;; Modify 
+(assert (forall ((h1 Packet) (h2 Packet) (v Value)) 
+  (implies (Min (pol-modify Switch v) h1) 
+           (iff (= h2 (mk-packet v (port-value h1) (hist-value h1))) (Eval (pol-modify Switch v) h1 h2)))))
 
-(assert (forall ((h1 Packet) (v Value)) (implies (Min (pol-modify Switch v) h1) (Eval (pol-modify Switch v) h1 (mk-packet v (port-value h1) (hist-value h1))))))
-(assert (forall ((h1 Packet) (v Value)) (implies (Min (pol-modify InPort v) h1) (Eval (pol-modify InPort v) h1 (mk-packet (switch-value h1) v (hist-value h1))))))
+(assert (forall ((h1 Packet) (h2 Packet) (v Value)) 
+  (implies (Min (pol-modify InPort v) h1) 
+           (iff (= h2 (mk-packet (switch-value h1) v (hist-value h1))) (Eval (pol-modify InPort v) h1 h2)))))
 
 ;; Eval functional
 
@@ -117,10 +123,9 @@
                               (Eval pol-one h1 h3))
                           (= h2 h3)))))
 
-
 ;; Min axiom propagation
 (assert (forall ((h Packet) (p Policy) (q Policy))
-           (implies (Min (pol-union p q) h) (or (Min p h) (Min q h)))))
+           (implies (Min (pol-union p q) h) (and (Min p h) (Min q h)))))
 
 (assert (forall ((h Packet) (h1 Packet) (p Policy) (q Policy))
            (implies (Min (pol-seq p q) h) 
@@ -140,7 +145,10 @@
 ;; (assert (Eval (pol-modify Switch 2) (mk-packet 1 0 nil) (mk-packet 2 0 nil)))
 ;; Tests
 
+(declare-var h2 Packet)
+(assert (= h2 (mk-packet 3 1 nil)))
+
 (assert (Min (pol-star (pol-seq (pol-filter Switch 1) (pol-modify Switch 3))) (mk-packet 1 1 nil)))
-(assert (Eval (pol-star (pol-seq (pol-filter Switch 1) (pol-modify Switch 3))) (mk-packet 1 1 nil) (mk-packet 2 2 nil)))
+(assert (Eval (pol-star (pol-seq (pol-filter Switch 1) (pol-modify Switch 3))) (mk-packet 1 1 nil) h2))
 (check-sat)
-;This is the program corresponding to smallest-possible-star
+(get-model)

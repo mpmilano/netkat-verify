@@ -89,6 +89,17 @@
                                        (Eval p h1 h3))
                                   (= h2 h3)))))
 
+;; Min axiom propagation 
+(assert (forall ((h Packet) (p Policy) (q Policy))
+           (implies (Min (pol-union p q) h) (and (Min p h) (Min q h)))))
+
+(assert (forall ((h Packet) (h1 Packet) (p Policy) (q Policy))
+           (implies (Min (pol-seq p q) h) 
+                    (and (Min p h)
+                         (implies (Eval p h h1) (Min q h1))))))
+
+(assert (forall ((h Packet) (p Policy))
+        (implies (Min (pol-star p) h) (Min (pol-union pol-one (pol-seq p (pol-star p))) h))))
 
 ;; Main
 (declare-var h1 Packet)
@@ -99,8 +110,8 @@
 (assert (= h1 (mk-packet 0 0 nil)))
 (assert (= h2 (mk-packet 2 0 nil)))
 
-
-; (assert (Eval p0 h1 h2))
+;(assert (Min p0 h1))
+;(assert (Eval p0 h1 h2))
 
 (check-sat)
 (get-model)
