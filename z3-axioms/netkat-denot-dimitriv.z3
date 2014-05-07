@@ -1,5 +1,7 @@
+
 ;; Values
 (define-sort Value () Int)
+
 
 ;; Fields
 (declare-datatypes () 
@@ -58,11 +60,17 @@
       (iff (or (Eval p h1 h2) (Eval q h1 h2)) (Eval (pol-union p q) h1 h2))
       )))
 
-;; Sequence
+;; Sequence, one direction 
 (assert (forall ((p Policy) (q Policy) (h1 Packet) (h2 Packet) (h3 Packet))
    (implies (Min (pol-seq p q) h1)
-            (iff (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3))
+            (implies (and (Eval p h1 h2) (Eval q h2 h3)) (Eval (pol-seq p q) h1 h3))
         )))
+
+;; Reverse axiom for sequence, note the ugly nested existential
+(assert (forall ((p Policy) (q Policy) (h1 Packet) (h3 Packet))
+   (implies (Min (pol-seq p q) h1)
+            (implies (Eval (pol-seq p q) h1 h3)
+                     (exists ((h2 Packet)) (and (Eval p h1 h2) (Eval q h2 h3)))))))
 
 ;; Star
 (assert (forall ((p Policy) (h1 Packet) (h2 Packet))
@@ -71,11 +79,12 @@
         )))
 
 ;; Dup -- causes loop!
-(assert (forall ((h1 Packet))
-   (implies (Min pol-dup h1)
-      (Eval pol-dup h1 (mk-packet (switch-value h1)
-                                  (port-value h1)
-                                  (insert (switch-value h1) (hist-value h1)))))))
+(assert (forall ((h1 Packet) (p Policy))
+   (! (implies (and (= p pol-dup) (Min pol-dup h1))
+       (Eval pol-dup h1 (mk-packet (switch-value h1)
+                                   (port-value h1)
+                                   (insert (switch-value h1) (hist-value h1)))))
+   :pattern (pol-dup))))
 
 
 ;; Filter 
@@ -83,11 +92,11 @@
 (assert (forall ((h1 Packet)) (implies (Min (pol-filter Port (port-value h1))     h1) (Eval (pol-filter Port   (port-value h1)) h1 h1))))
 
 ;; Modify 
+
 (assert (forall ((h1 Packet) (v Value)) (implies (Min (pol-modify Switch v) h1) (Eval (pol-modify Switch v) h1 (mk-packet v (port-value h1) (hist-value h1))))))
 (assert (forall ((h1 Packet) (v Value)) (implies (Min (pol-modify Port v) h1) (Eval (pol-modify Port v) h1 (mk-packet (switch-value h1) v (hist-value h1))))))
 
 ;; Eval functional
-;; TODO: Not reallty functional
 
 (assert (forall ((h1 Packet) (f Field) (v Value) (h2 Packet) (h3 Packet))
         (implies (Min (pol-filter f v) h1)
@@ -115,8 +124,9 @@
 
 (assert (forall ((h Packet) (h1 Packet) (p Policy) (q Policy))
            (implies (Min (pol-seq p q) h) 
-                    (and (Min p h)
-                         (implies (Eval p h h1)  (Min q h1))))))
+                         (and (Min p h)
+                            (implies (Eval p h h1)  (Min q h1))))))
+
 (assert (forall ((h Packet) (p Policy))
         (implies (Min (pol-star p) h) (Min (pol-union pol-one (pol-seq p (pol-star p))) h))))
 
@@ -124,10 +134,54 @@
         (implies (Min (pol-neg p) h) (Min p h))))
 
 
- (assert (Min (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil)))
- (assert (Eval (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil) (mk-packet 2 0 nil)))
+;; (assert (Min (pol-modify Switch 1) (mk-packet 0 0 nil)))
+;; (assert (Min (pol-modify Switch 2) (mk-packet 1 0 nil)))
+;; (assert (Eval (pol-modify Switch 1) (mk-packet 0 0 nil) (mk-packet 1 0 nil)))
+;; (assert (Eval (pol-modify Switch 2) (mk-packet 1 0 nil) (mk-packet 2 0 nil)))
+;; Tests
 
+;; (assert (not (exists ((h Packet)) (Min pol-dup h))))
 
+(push)
+(assert (Min (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil)))
+
+(assert (Eval (pol-seq (pol-modify Switch 1) (pol-modify Switch 2)) (mk-packet 0 0 nil) (mk-packet 0 0 nil)))
 (check-sat)
+(pop)
+
+(push)
+(assert (Min (pol-seq (pol-filter Switch 0)
+         (pol-seq (pol-filter Port 0)
+                  (pol-seq (pol-modify Switch 1)
+                           (pol-modify Port 1)))) (mk-packet 0 0 nil)))
+(assert (Eval (pol-seq (pol-filter Switch 0)
+         (pol-seq (pol-filter Port 0)
+                  (pol-seq (pol-modify Switch 1)
+                           (pol-modify Port 1)))) (mk-packet 0 0 nil) (mk-packet 1 1 nil)))
+(check-sat)
+(pop)
+
+;#define test-port(x) (pol-seq (pol-filter Port x)
+;#define test-switch(x) (pol-seq (pol-filter Port x)
+;#define mod-switch(x) (pol-seq (pol-modify Switch x)
+;#define mod-port(x) (pol-seq (pol-modify Port x)
+
+(push)
+
+(assert (Min (pol-star
+ (pol-seq (pol-filter Switch 0)
+          (pol-seq (pol-filter Port 0)
+                   (pol-seq (pol-modify Switch 1)
+                            (pol-modify Port 1))))) (mk-packet 0 0 nil)))
+
+(assert (Eval (pol-star
+ (pol-seq (pol-filter Switch 0)
+          (pol-seq (pol-filter Port 0)
+                   (pol-seq (pol-modify Switch 1)
+                            (pol-modify Port 1))))) (mk-packet 0 0 nil) (mk-packet 1 1 nil)))
+(check-sat)
+
+(pop)
+;; (get-proof)
 ;; (get-model)
 

@@ -285,6 +285,7 @@ module type Sat_description =
 sig 
   val serialize_sort : Sat_Syntax.zSort -> string
   val serialize_term : Sat_Syntax.zTerm -> string
+  val serialize_formula : Sat_Syntax.zFormula -> string
   val serialize_program : Sat_Syntax.zProgram -> string
   val assemble_program : (Sat_Syntax.zDeclare list) -> Sat_Syntax.zProgram -> Sat_Syntax.zDeclare -> Sat_Syntax.zProgram
   val fresh : Sat_Syntax.zSort -> Sat_Syntax.zVar * Sat_Syntax.zDeclare

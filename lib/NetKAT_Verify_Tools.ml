@@ -59,6 +59,8 @@ let rec make_packet (headers_values : (header * 'a) list ) =
 							  make_packet tl)
 	| [] -> True
 
+let mk_packet a b = Printf.sprintf "(mk-packet %u %u nil)" a b
+
 let make_packet_1 switch = 
   Test (Switch, make_vint switch)
 
